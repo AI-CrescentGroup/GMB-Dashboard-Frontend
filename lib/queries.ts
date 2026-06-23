@@ -132,9 +132,9 @@ export async function getFilterOptions() {
   if (error) throw error
 
   // Deduplicate in JavaScript
-  const zones = [...new Set(allDealers?.map((d: any) => d.zone).filter(Boolean))] || []
-  const markets = [...new Set(allDealers?.map((d: any) => d.market).filter(Boolean))] || []
-  const statuses = [...new Set(allDealers?.map((d: any) => d.campaign_status).filter(Boolean))] || []
+  const zones = [...new Set(allDealers?.map((d: any) => d.zone).filter(Boolean))]
+  const markets = [...new Set(allDealers?.map((d: any) => d.market).filter(Boolean))]
+  const statuses = [...new Set(allDealers?.map((d: any) => d.campaign_status).filter(Boolean))]
 
   return { zones, markets, statuses }
 }

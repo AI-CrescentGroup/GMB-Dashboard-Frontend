@@ -252,10 +252,10 @@ export async function exportDealerPPT(data: ExportData) {
     })
   })
 
-  // Generate file buffer
-  const buffer = await prs.write({})
+  // Generate base64 directly — avoids Buffer.from type mismatch
+  const base64 = await prs.write({ outputType: 'base64' }) as string
   return {
-    buffer: Buffer.from(buffer).toString('base64'),
+    buffer: base64,
     fileName: `${data.dealerName}_GMB_Report_${new Date().toISOString().split('T')[0]}.pptx`,
   }
 }
