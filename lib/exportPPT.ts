@@ -1,3 +1,5 @@
+'use server'
+
 import PptxGenJS from 'pptxgenjs'
 
 interface PlatformData {
@@ -24,7 +26,7 @@ interface ExportData {
   conversions: ConversionData
 }
 
-export function exportDealerPPT(data: ExportData) {
+export async function exportDealerPPT(data: ExportData) {
   const prs = new PptxGenJS()
 
   // Slide dimensions
@@ -250,6 +252,10 @@ export function exportDealerPPT(data: ExportData) {
     })
   })
 
-  // Download the file
-  prs.writeFile({ fileName: `${data.dealerName}_GMB_Report_${new Date().toISOString().split('T')[0]}.pptx` })
+  // Generate file buffer
+  const buffer = await prs.write({})
+  return {
+    buffer: Buffer.from(buffer).toString('base64'),
+    fileName: `${data.dealerName}_GMB_Report_${new Date().toISOString().split('T')[0]}.pptx`,
+  }
 }

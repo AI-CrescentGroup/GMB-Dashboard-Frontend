@@ -161,7 +161,7 @@ export default function DealersPage() {
   // When no specific dealer is selected, show all dealers metrics
   const displayMetric = selectedDealerId ? selectedDealerMetric : allDealersMetric
 
-  const handleExportPPT = () => {
+  const handleExportPPT = async () => {
     if (!selectedDealerId) {
       alert('Please select a dealer first')
       return
@@ -276,7 +276,7 @@ export default function DealersPage() {
       events: formatCount(events),
     }
 
-    exportDealerPPT({
+    const result = await exportDealerPPT({
       dealerName: selectedDealer.dealer_name,
       dateRange: dateRangeText,
       google: googleData,
@@ -284,6 +284,22 @@ export default function DealersPage() {
       instagram: instagramData,
       conversions: conversionsData,
     })
+
+    // Trigger download on client
+    const binaryString = atob(result.buffer)
+    const bytes = new Uint8Array(binaryString.length)
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i)
+    }
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = result.fileName
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   // Adaptive formatting helpers
