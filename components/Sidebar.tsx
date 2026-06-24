@@ -12,7 +12,7 @@ type Role = "admin" | "branch_head" | "dealer"
 interface NavItem {
   href: string
   label: string
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
+  icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>
   roles?: Role[]
   badge?: string | number
 }
