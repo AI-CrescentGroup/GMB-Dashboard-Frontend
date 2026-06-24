@@ -1,46 +1,63 @@
-interface KPICardProps {
+import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react"
+import { Card } from "@/components/ui/card"
+
+export interface KPICardProps {
   label: string
   value: string | number
+  delta?: number
+  deltaLabel?: string
+  icon?: React.ReactNode
+  loading?: boolean
+  format?: (v: string | number) => string
   unit?: string
   change?: number
-  icon?: React.ReactNode
-  accent?: 'blue' | 'orange' | 'green' | 'purple' | 'red'
+  accent?: string
 }
 
-const accentMap = {
-  blue: 'bg-blue-50 text-blue-500',
-  orange: 'bg-orange-50 text-orange-500',
-  green: 'bg-green-50 text-green-500',
-  purple: 'bg-purple-50 text-purple-500',
-  red: 'bg-red-50 text-red-500',
-}
+export default function KPICard({
+  label, value, delta, deltaLabel = "vs last period", icon, loading, format, unit = '', change,
+}: KPICardProps) {
+  const effectiveDelta = delta ?? change
+  const trend = effectiveDelta == null ? "flat" : effectiveDelta > 0 ? "up" : effectiveDelta < 0 ? "down" : "flat"
+  const TrendIcon = trend === "up" ? ArrowUpRight : trend === "down" ? ArrowDownRight : Minus
 
-export default function KPICard({ label, value, unit = '', change, icon, accent = 'blue' }: KPICardProps) {
   const valueStr = typeof value === 'number' ? value.toLocaleString('en-IN') : value
-  let valueFontSize = 'text-2xl'
-  if (valueStr.length > 8) valueFontSize = 'text-lg'
-  else if (valueStr.length > 5) valueFontSize = 'text-xl'
+  const displayValue = format ? format(value) : valueStr
 
   return (
-    <div className="bg-white rounded-2xl p-6 transition-all overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
-      <div className="flex items-start justify-between mb-4">
-        <p className="text-xs text-gray-400 font-semibold uppercase tracking-widest">{label}</p>
+    <Card className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-medium text-slate-500">{label}</span>
         {icon && (
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${accentMap[accent]}`}>{icon}</div>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-600">
+            {icon}
+          </span>
         )}
       </div>
-      <div className="flex items-baseline gap-2 overflow-hidden">
-        <p className={`${valueFontSize} font-bold text-gray-900 overflow-hidden text-ellipsis`}>
-          {valueStr}
-        </p>
-        {unit && <span className="text-sm text-gray-400 flex-shrink-0">{unit}</span>}
-      </div>
-      {change !== undefined && (
-        <div className={`mt-3 text-xs font-semibold ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-          {change >= 0 ? '+' : ''}
-          {change}% from last period
+
+      {loading ? (
+        <div className="h-9 w-24 animate-pulse rounded-md bg-slate-100" />
+      ) : (
+        <div className="text-[28px] font-semibold tracking-tight text-slate-900 tabular-nums leading-none">
+          {displayValue}{unit && <span className="text-[16px] text-slate-500 ml-1">{unit}</span>}
         </div>
       )}
-    </div>
+
+      {effectiveDelta != null && (
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-medium tabular-nums ${
+              trend === "up" ? "bg-emerald-50 text-emerald-700" :
+              trend === "down" ? "bg-rose-50 text-rose-700" :
+              "bg-slate-100 text-slate-600"
+            }`}
+          >
+            <TrendIcon className="h-3 w-3" strokeWidth={2.5} />
+            {Math.abs(effectiveDelta).toFixed(1)}%
+          </span>
+          <span className="text-slate-500">{deltaLabel}</span>
+        </div>
+      )}
+    </Card>
   )
 }

@@ -17,40 +17,44 @@ export default function StatsCard({
   subtitle,
 }: StatsCardProps) {
   const valueStr = typeof value === 'number' ? value.toLocaleString('en-IN') : value
-  let valueFontSize = 'text-5xl'
-  if (valueStr.length > 8) valueFontSize = 'text-3xl'
-  else if (valueStr.length > 6) valueFontSize = 'text-4xl'
+  let valueFontSize = 'text-[42px]'
+  if (valueStr.length > 8) valueFontSize = 'text-[28px]'
+  else if (valueStr.length > 6) valueFontSize = 'text-[34px]'
 
   return (
     <div
-      className="bg-white rounded-2xl p-6 transition-all overflow-visible"
+      className="bg-white rounded-2xl p-6 transition-shadow duration-200 overflow-visible"
       style={{
-        boxShadow: 'var(--shadow-card)',
-        borderTop: '3px solid #e07856',
+        boxShadow: '0 2px 12px rgba(15,23,42,0.06)',
+        borderTop: '3px solid #6366F1',
         textAlign: 'center',
       }}
     >
-      <div className="flex items-center justify-center mb-6">
-        {icon && (
-          <div className="p-3 rounded-xl w-10 h-10 flex items-center justify-center" style={{ backgroundColor: '#fff5f2', color: '#e07856' }}>
+      {icon && (
+        <div className="flex items-center justify-center mb-5">
+          <div className="h-9 w-9 flex items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
             {icon}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="flex flex-col items-center">
-        <p className="text-xs font-semibold text-gray-400 uppercase mb-2 tracking-widest">{label}</p>
-        <div className="flex items-baseline gap-2 justify-center overflow-hidden">
-          <p className={`${valueFontSize} font-bold text-gray-900 overflow-hidden text-ellipsis`}>
+        <p className="text-[11px] font-medium text-slate-500 uppercase tracking-widest mb-2">{label}</p>
+        <div className="flex items-baseline gap-1.5 justify-center">
+          <p className={`${valueFontSize} font-semibold tracking-tight text-slate-900 tabular-nums leading-none`}>
             {valueStr}
           </p>
-          {unit && <span className="text-sm font-medium text-gray-600 flex-shrink-0">{unit}</span>}
+          {unit && <span className="text-[13px] font-medium text-slate-500 flex-shrink-0">{unit}</span>}
         </div>
-        {subtitle && <p className="text-xs text-gray-400 mt-3">{subtitle}</p>}
+        {subtitle && <p className="text-[11px] text-slate-400 mt-2">{subtitle}</p>}
       </div>
 
       {trend !== undefined && (
-        <div className={`text-xs font-semibold mt-4 ${trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+        <div
+          className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-medium mt-4 tabular-nums ${
+            trend >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+          }`}
+        >
           {trend >= 0 ? '↑' : '↓'} {Math.abs(trend)}% vs last month
         </div>
       )}

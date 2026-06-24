@@ -108,15 +108,15 @@ export default function OverviewPage() {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
-          <Activity size={40} className="text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 font-medium">Loading dashboard...</p>
+          <Activity size={40} className="text-indigo-500 animate-spin mx-auto mb-4" />
+          <p className="text-slate-500 text-[13px]">Loading dashboard…</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-8 space-y-6">
+    <div className="mx-auto max-w-[1440px] px-6 lg:px-8 py-6 lg:py-8 space-y-6">
       {/* Filters */}
       <FilterBar filters={filters} onFilterChange={setFilters} filteredDealers={uiFilteredDealers} />
 

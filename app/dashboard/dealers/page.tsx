@@ -563,26 +563,26 @@ export default function DealersPage() {
   }, [displayMetrics, allDealersMetrics, selectedDealerId, selectedMonth, dateFrom, dateTo, viewMode])
 
   return (
-    <div className="space-y-10">
+    <div className="mx-auto max-w-[1440px] px-6 lg:px-8 py-6 lg:py-8 space-y-6">
       {/* Page Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-gray-900">Individual Dealers</h1>
-        <p className="text-gray-600">Deep dive into dealer performance and metrics</p>
+      <div>
+        <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">Individual Dealers</h1>
+        <p className="text-slate-500 text-[13px] mt-1">Deep dive into dealer performance and metrics</p>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center h-96">
-          <Activity size={40} className="text-blue-600 animate-spin" />
+          <Activity size={40} className="text-indigo-500 animate-spin" />
         </div>
       ) : (
         <>
           {/* Controls Row */}
-          <div className="bg-white rounded-2xl p-6 flex items-end gap-4 flex-wrap" style={{ boxShadow: 'var(--shadow-card)' }}>
+          <div className="bg-white rounded-2xl p-5 flex items-end gap-4 flex-wrap" style={{ boxShadow: '0 2px 12px rgba(15,23,42,0.06)' }}>
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-xs font-semibold text-gray-600 uppercase mb-2 tracking-widest">
+              <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-1.5">
                 Select Dealer
               </label>
-              <Select value={selectedDealerId} onChange={(e) => setSelectedDealerId(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white h-10">
+              <Select value={selectedDealerId} onChange={(e) => setSelectedDealerId(e.target.value)} className="w-full h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-100">
                 <option value="">-- All Dealers (Aggregated) --</option>
                 {dealers.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -594,10 +594,10 @@ export default function DealersPage() {
 
             {viewMode === 'monthly' ? (
               <div className="flex-1 min-w-[150px]">
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2 tracking-widest">
+                <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-1.5">
                   Month
                 </label>
-                <Select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white h-10">
+                <Select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="w-full h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-100">
                   {MONTHS.map((m) => (
                     <option key={m.value} value={m.value}>
                       {m.label}
@@ -608,43 +608,43 @@ export default function DealersPage() {
             ) : (
               <>
                 <div className="flex-1 min-w-[140px]">
-                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-2 tracking-widest">
+                  <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-1.5">
                     From Date
                   </label>
                   <input
                     type="date"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
-                    className="w-full px-3 py-2 h-10 border border-gray-200 rounded-xl text-sm text-gray-700 bg-white"
+                    className="w-full px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-100"
                   />
                 </div>
                 <div className="flex-1 min-w-[140px]">
-                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-2 tracking-widest">
+                  <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-1.5">
                     To Date
                   </label>
                   <input
                     type="date"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
-                    className="w-full px-3 py-2 h-10 border border-gray-200 rounded-xl text-sm text-gray-700 bg-white"
+                    className="w-full px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-100"
                   />
                 </div>
               </>
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase mb-2 tracking-widest invisible">
+              <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-1.5 invisible">
                 View Mode
               </label>
-              <div className="flex gap-1 h-10">
+              <div className="flex gap-1 h-9 bg-slate-100 rounded-lg p-1">
                 <button
-                  className={`px-3 py-2 rounded-xl text-sm font-medium transition ${viewMode === 'monthly' ? 'bg-[#e07856] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  className={`px-3 rounded-md text-[13px] font-medium transition ${viewMode === 'monthly' ? 'bg-indigo-600 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08)]' : 'text-slate-600 hover:text-slate-900'}`}
                   onClick={() => setViewMode('monthly')}
                 >
                   Monthly
                 </button>
                 <button
-                  className={`px-3 py-2 rounded-xl text-sm font-medium transition ${viewMode === 'daterange' ? 'bg-[#e07856] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  className={`px-3 rounded-md text-[13px] font-medium transition ${viewMode === 'daterange' ? 'bg-indigo-600 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08)]' : 'text-slate-600 hover:text-slate-900'}`}
                   onClick={() => setViewMode('daterange')}
                 >
                   Date Range
@@ -653,14 +653,14 @@ export default function DealersPage() {
             </div>
 
             <div className="ml-auto">
-              <label className="block text-xs font-semibold text-gray-600 uppercase mb-2 tracking-widest invisible">
+              <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-1.5 invisible">
                 Export
               </label>
               <button
                 onClick={handleExportPPT}
-                className="h-10 px-4 rounded-xl text-sm font-medium text-white bg-[#e07856] hover:bg-[#d46a47] transition flex items-center gap-2"
+                className="h-9 px-3.5 rounded-lg text-[13px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center gap-2 shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
               >
-                <Download size={16} />
+                <Download size={15} />
                 Download PPT
               </button>
             </div>
@@ -672,10 +672,10 @@ export default function DealersPage() {
               <button
                 key={platform.id}
                 onClick={() => setSelectedPlatform(platform.id)}
-                className={`h-9 px-4 rounded-xl text-sm font-medium transition flex items-center gap-2 ${
+                className={`h-9 px-4 rounded-lg text-[13px] font-medium transition flex items-center gap-2 ${
                   selectedPlatform === platform.id
-                    ? 'bg-[#e07856] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-indigo-600 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
                 {platform.id !== 'conversions' && (

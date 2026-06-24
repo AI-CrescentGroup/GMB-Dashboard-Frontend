@@ -62,11 +62,11 @@ export default function ConversionsPage() {
   const totalEvents = metrics.reduce((sum, m) => sum + (m.event_count || 0), 0)
 
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-[1440px] px-6 lg:px-8 py-6 lg:py-8 space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="title-lg text-gray-900">Conversions</h1>
-        <p className="text-gray-500 mt-2">Track conversion metrics and customer actions</p>
+        <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">Conversions</h1>
+        <p className="text-slate-500 text-[13px] mt-1">Track conversion metrics and customer actions</p>
       </div>
 
       {/* Filters */}
@@ -74,7 +74,7 @@ export default function ConversionsPage() {
 
       {loading ? (
         <div className="flex items-center justify-center h-96">
-          <Activity size={40} className="text-brand-600 animate-spin" />
+          <Activity size={40} className="text-indigo-500 animate-spin" />
         </div>
       ) : (
         <>

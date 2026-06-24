@@ -24,9 +24,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#f9f7f4" }}>
+    <div className="min-h-screen bg-slate-50">
       <Header />
-      <main className="px-6 py-6 md:px-8 md:py-8">
+      <main>
         {children}
       </main>
     </div>

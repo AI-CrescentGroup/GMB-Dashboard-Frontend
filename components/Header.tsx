@@ -39,31 +39,33 @@ export default function Header() {
     : 'U'
 
   return (
-    <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
-      <div className="w-full px-8 py-4" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center' }}>
-        {/* Left: Logo + Title */}
-        <div className="flex items-center gap-3" style={{ justifySelf: 'start' }}>
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
-            GMB
-          </div>
+    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
+      <div
+        className="w-full px-8 h-16"
+        style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center' }}
+      >
+        {/* Left: Brand */}
+        <div className="flex items-center gap-2.5" style={{ justifySelf: 'start' }}>
+          <div className="h-7 w-7 rounded-md bg-indigo-600 flex items-center justify-center flex-shrink-0" />
           <div>
-            <h1 className="text-base font-bold text-gray-900 leading-tight">GMB Dashboard</h1>
-            <p className="text-xs text-gray-400">Jaquar Analytics</p>
+            <span className="text-[15px] font-semibold tracking-tight text-slate-900">
+              Jaquar <span className="text-slate-400 font-normal">GMB</span>
+            </span>
           </div>
         </div>
 
         {/* Center: Pill Nav */}
-        <nav className="flex items-center gap-1 bg-gray-50 rounded-full p-1">
+        <nav className="flex items-center gap-1 bg-slate-100 rounded-full p-1">
           {navItems.map((item) => {
             const isActive = pathname === item.href
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`px-6 py-2 rounded-full text-sm font-semibold transition whitespace-nowrap ${
+                className={`px-6 py-1.5 rounded-full text-[13px] font-medium transition whitespace-nowrap ${
                   isActive
-                    ? 'bg-[#e07856] text-white'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'bg-indigo-600 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 {item.label}
@@ -73,24 +75,24 @@ export default function Header() {
         </nav>
 
         {/* Right: User + Logout */}
-        <div className="flex items-center justify-end gap-4" style={{ justifySelf: 'end' }}>
+        <div className="flex items-center justify-end gap-3" style={{ justifySelf: 'end' }}>
           {user && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-700 font-medium">{user.username}</span>
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                style={{ backgroundColor: '#e07856' }}
-              >
+            <div className="flex items-center gap-2.5">
+              <div className="hidden sm:block text-right">
+                <div className="text-[13px] font-medium leading-tight text-slate-900">{user.username}</div>
+              </div>
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-semibold text-indigo-700 flex-shrink-0">
                 {userInitials}
               </div>
             </div>
           )}
+          <div className="h-5 w-px bg-slate-200" />
           <button
             onClick={handleLogout}
-            className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition"
             title="Logout"
           >
-            <LogOut size={18} />
+            <LogOut size={16} />
           </button>
         </div>
       </div>
