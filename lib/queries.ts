@@ -26,7 +26,7 @@ export async function getMetrics(
   while (hasMore) {
     let query = supabase
       .from('daily_metrics')
-      .select('*')
+      .select('id, dealer_id, client_id, metric_date, platform, campaign_name, impressions, reach, link_clicks, spend_inr, cpm_inr, ctr_percent, avg_cpc_inr, frequency, website_visits, event_count, event_call_number_track, event_call_track, event_download_catalogue, event_drive_direction, event_enquiry_track, event_form_submit, store_visits, driving_directions, data_source, created_at')
       .gt('id', lastId)
       .order('id', { ascending: true })
       .limit(pageSize)
