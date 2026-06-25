@@ -125,11 +125,13 @@ function KpiCard({
   label,
   value,
   note,
+  subtitle,
 }: {
   icon: ReactNode
   label: string
   value: string
   note?: string
+  subtitle?: string
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
@@ -138,6 +140,7 @@ function KpiCard({
         <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">{label}</span>
       </div>
       <div className={`text-2xl font-bold ${note ? 'text-slate-400' : 'text-slate-900'}`}>{value}</div>
+      {subtitle && <div className="text-xs text-slate-400 mt-1">{subtitle}</div>}
       {note && <div className="text-xs text-slate-400 mt-1">{note}</div>}
     </div>
   )
@@ -320,10 +323,13 @@ export default function DealersPage() {
   )
 
   const conversions = useMemo(() => {
-    let directions = 0, websiteVisits = 0, callNumberTrack = 0, callTrack = 0,
+    let directions = 0, storeVisits = 0, websiteVisits = 0, callNumberTrack = 0, callTrack = 0,
       downloadCatalogue = 0, driveDirection = 0, enquiryTrack = 0, formSubmit = 0
     displayMetrics.forEach((m: any) => {
-      if (m.platform === 'google') directions += m.driving_directions || 0
+      if (m.platform === 'google') {
+        directions += m.driving_directions || 0
+        storeVisits += m.store_visits || 0
+      }
       if (m.platform === 'ga4') {
         websiteVisits += m.website_visits || 0
         callNumberTrack += m.event_call_number_track || 0
@@ -334,7 +340,7 @@ export default function DealersPage() {
         formSubmit += m.event_form_submit || 0
       }
     })
-    return { directions, websiteVisits, callNumberTrack, callTrack, downloadCatalogue, driveDirection, enquiryTrack, formSubmit }
+    return { directions, storeVisits, websiteVisits, callNumberTrack, callTrack, downloadCatalogue, driveDirection, enquiryTrack, formSubmit }
   }, [displayMetrics])
 
   const adCreatives = useMemo(() => {
@@ -700,12 +706,13 @@ export default function DealersPage() {
                 icon={<Navigation size={16} className="text-emerald-500" />}
                 label="Driving Directions"
                 value={formatNumber(conversions.directions)}
+                subtitle="From Google Ads"
               />
               <KpiCard
-                icon={<MapPin size={16} className="text-slate-300" />}
+                icon={<MapPin size={16} className="text-emerald-500" />}
                 label="Store Visits"
-                value="—"
-                note="Connector pending"
+                value={formatNumber(conversions.storeVisits)}
+                subtitle="From Google Ads"
               />
             </div>
 
@@ -737,7 +744,7 @@ export default function DealersPage() {
                       { label: 'Call Number Track', value: conversions.callNumberTrack },
                       { label: 'Call Track', value: conversions.callTrack },
                       { label: 'Download Catalogue', value: conversions.downloadCatalogue },
-                      { label: 'Drive Direction', value: conversions.driveDirection },
+                      { label: 'Drive Direction (GA4 event)', value: conversions.driveDirection },
                       { label: 'Enquiry Track', value: conversions.enquiryTrack },
                       { label: 'Form Submit', value: conversions.formSubmit },
                     ].map(({ label, value }) => (

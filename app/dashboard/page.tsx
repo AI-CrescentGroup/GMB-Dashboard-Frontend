@@ -109,6 +109,7 @@ function KpiCard({
   note,
   prefix,
   suffix,
+  subtitle,
 }: {
   icon: React.ReactNode
   label: string
@@ -116,6 +117,7 @@ function KpiCard({
   note?: string
   prefix?: string
   suffix?: string
+  subtitle?: string
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
@@ -126,6 +128,7 @@ function KpiCard({
       <div className={`text-2xl font-bold ${note ? 'text-slate-400' : 'text-slate-900'}`}>
         {prefix}{value}{suffix}
       </div>
+      {subtitle && <div className="text-xs text-slate-400 mt-1">{subtitle}</div>}
       {note && <div className="text-xs text-slate-400 mt-1">{note}</div>}
     </div>
   )
@@ -192,7 +195,7 @@ export default function OverviewPage() {
   // ── KPI computations ─────────────────────────────────────────────────────────
 
   const kpi = useMemo(() => {
-    let directions = 0, websiteVisits = 0
+    let directions = 0, storeVisits = 0, websiteVisits = 0
     let googleSpend = 0, googleClicks = 0
     let metaSpend = 0, metaImpressions = 0
     let totalClicks = 0, totalImpressions = 0
@@ -200,6 +203,7 @@ export default function OverviewPage() {
     metrics.forEach((m: any) => {
       if (m.platform === 'google') {
         directions += m.driving_directions || 0
+        storeVisits += m.store_visits || 0
         googleSpend += m.spend_inr || 0
         googleClicks += m.link_clicks || 0
         totalClicks += m.link_clicks || 0
@@ -218,7 +222,7 @@ export default function OverviewPage() {
     const avgCpm = metaImpressions > 0 ? (metaSpend / metaImpressions) * 1000 : 0
     const overallCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0
 
-    return { directions, websiteVisits, avgCpc, avgCpm, overallCtr }
+    return { directions, storeVisits, websiteVisits, avgCpc, avgCpm, overallCtr }
   }, [metrics])
 
   // ── Dealer lookup map ─────────────────────────────────────────────────────────
@@ -346,15 +350,16 @@ export default function OverviewPage() {
             note="Dashlog (coming soon)"
           />
           <KpiCard
-            icon={<MapPin size={16} className="text-slate-300" />}
+            icon={<MapPin size={16} className="text-emerald-500" />}
             label="Store Visits"
-            value="—"
-            note="Connector pending"
+            value={formatNumber(kpi.storeVisits)}
+            subtitle="From Google Ads"
           />
           <KpiCard
             icon={<Navigation size={16} className="text-emerald-500" />}
             label="Driving Directions"
             value={formatNumber(kpi.directions)}
+            subtitle="From Google Ads"
           />
           <KpiCard
             icon={<Activity size={16} className="text-blue-500" />}
