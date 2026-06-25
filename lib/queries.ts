@@ -256,6 +256,17 @@ export function getGoogleMetricsByMonth(rows: any[]): Array<{ month: string; imp
   }))
 }
 
+// Get the most recent metric_date across all data
+export async function getLatestMetricDate(): Promise<string> {
+  const { data, error } = await supabase
+    .from('daily_metrics')
+    .select('metric_date')
+    .order('metric_date', { ascending: false })
+    .limit(1)
+  if (error) throw error
+  return data?.[0]?.metric_date ?? '—'
+}
+
 // Get top 10 performers by metric (pure function, no network calls)
 export function getTopPerformers(
   rows: any[],
