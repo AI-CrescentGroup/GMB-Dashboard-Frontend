@@ -4,7 +4,7 @@ import { supabase } from './supabase'
 export async function getDealers() {
   const { data, error } = await supabase
     .from('dealers')
-    .select('id, dealer_name, zone, market, campaign_status')
+    .select('id, dealer_name, zone, state, market, campaign_status')
     .order('dealer_name', { ascending: true })
 
   if (error) throw error
