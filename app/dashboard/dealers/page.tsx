@@ -161,12 +161,16 @@ function CampaignTable({
   showCpm,
   isAllDealers,
   budgetInr,
+  reachValue,
+  showReachLabel,
 }: {
   campaigns: ReturnType<typeof groupCampaigns>
   dealerStatus: string | null | undefined
   showCpm: boolean
   isAllDealers: boolean
   budgetInr?: number
+  reachValue?: number
+  showReachLabel?: boolean
 }) {
   if (campaigns.length === 0) {
     return (
@@ -191,7 +195,9 @@ function CampaignTable({
           <th className={`${TH} text-center w-[7%]`}>Status</th>
           <th className={`${TH} text-center w-[10%]`}>Period</th>
           <th className={`${TH} text-right w-[7%]`}>Budget</th>
-          <th className={`${TH} text-right w-[7%]`}>Reach</th>
+          <th className={`${TH} text-right w-[7%]`}>
+            {showReachLabel !== false ? 'Reach' : ''}
+          </th>
           <th className={`${TH} text-right w-[9%]`}>Impressions</th>
           <th className={`${TH} text-right w-[7%]`}>CTR %</th>
           <th className={`${TH} text-right w-[8%]`}>{showCpm ? 'CPM ₹' : 'CPC ₹'}</th>
@@ -211,8 +217,19 @@ function CampaignTable({
             <td className={`${TD} text-right w-[7%]`}>
               {budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
             </td>
-            <td className={`${TD} text-right w-[7%]`} title={showCpm ? "Live Meta API — coming soon" : undefined}>
-              <span className="text-slate-400">{showCpm ? "—*" : "—"}</span>
+            <td
+              className={`${TD} text-right w-[7%]`}
+              title={showReachLabel !== false && !reachValue ? "Live Meta API — coming soon" : undefined}
+            >
+              {showReachLabel === false ? (
+                <span className="text-slate-200">—</span>
+              ) : reachValue && reachValue > 0 ? (
+                <span className="text-slate-700 font-medium">
+                  {formatNumber(reachValue)}
+                </span>
+              ) : (
+                <span className="text-slate-400">—*</span>
+              )}
             </td>
             <td className={`${TD} text-right w-[9%]`}>{formatNumber(totalImpressions)}</td>
             <td className={`${TD} text-right w-[7%]`}>{summaryCtr}%</td>
@@ -234,8 +251,19 @@ function CampaignTable({
               <td className={`${TD} text-right w-[7%]`}>
                 {budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
               </td>
-              <td className={`${TD} text-right w-[7%]`} title={showCpm ? "Live Meta API — coming soon" : undefined}>
-                <span className="text-slate-400">{showCpm ? "—*" : "—"}</span>
+              <td
+                className={`${TD} text-right w-[7%]`}
+                title={showReachLabel !== false && !reachValue ? "Live Meta API — coming soon" : undefined}
+              >
+                {showReachLabel === false ? (
+                  <span className="text-slate-200">—</span>
+                ) : reachValue && reachValue > 0 ? (
+                  <span className="text-slate-700 font-medium">
+                    {formatNumber(reachValue)}
+                  </span>
+                ) : (
+                  <span className="text-slate-400">—*</span>
+                )}
               </td>
               <td className={`${TD} text-right w-[9%]`}>{formatNumber(c.impressions)}</td>
               <td className={`${TD} text-right w-[7%]`}>{c.ctr}%</td>
@@ -315,6 +343,22 @@ export default function DealersPage() {
     () => dealers.find((d: any) => d.id === selectedDealerId) ?? null,
     [dealers, selectedDealerId]
   )
+
+  const isSingleDay = useMemo(() => {
+    const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
+    return from === to
+  }, [viewMode, selectedMonth, dateFrom, dateTo])
+
+  const reachByPlatform = useMemo(() => {
+    if (!isSingleDay) return { facebook: 0, instagram: 0 }
+    let facebook = 0
+    let instagram = 0
+    displayMetrics.forEach((m: any) => {
+      if (m.platform === 'facebook') facebook += m.reach || 0
+      if (m.platform === 'instagram') instagram += m.reach || 0
+    })
+    return { facebook, instagram }
+  }, [displayMetrics, isSingleDay])
 
   const kpi = useMemo(() => {
     let totalSpend = 0, totalImpressions = 0, totalClicks = 0, websiteVisits = 0
@@ -693,6 +737,8 @@ export default function DealersPage() {
                 showCpm={false}
                 isAllDealers={!selectedDealerId}
                 budgetInr={googleBudget}
+                showReachLabel={false}
+                reachValue={undefined}
               />
             </div>
           </div>
@@ -717,6 +763,8 @@ export default function DealersPage() {
                 showCpm={true}
                 isAllDealers={!selectedDealerId}
                 budgetInr={facebookBudget}
+                showReachLabel={true}
+                reachValue={isSingleDay ? reachByPlatform.facebook : undefined}
               />
             </div>
           </div>
@@ -742,6 +790,8 @@ export default function DealersPage() {
                 showCpm={true}
                 isAllDealers={!selectedDealerId}
                 budgetInr={instagramBudget}
+                showReachLabel={true}
+                reachValue={isSingleDay ? reachByPlatform.instagram : undefined}
               />
             </div>
           </div>
