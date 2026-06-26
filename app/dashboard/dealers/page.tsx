@@ -126,15 +126,17 @@ function KpiCard({
   value,
   note,
   subtitle,
+  bgClass = 'bg-white',
 }: {
   icon: ReactNode
   label: string
   value: string
   note?: string
   subtitle?: string
+  bgClass?: string
 }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+    <div className={`${bgClass} rounded-xl border border-slate-200 shadow p-5`}>
       <div className="flex items-center gap-2 mb-2">
         {icon}
         <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">{label}</span>
@@ -451,17 +453,17 @@ export default function DealersPage() {
   // ── JSX ──────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-[1200px] mx-auto px-8 py-8">
+    <div className="w-full bg-slate-50 py-6 px-6 md:px-10">
+      <div className="w-full max-w-6xl mx-auto">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200 mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">Marketing Campaign Reports</h1>
         <span className="text-xs text-slate-400">Updated till: {latestDate}</span>
       </div>
 
       {/* ── Filter Bar ── */}
-      <div className="flex flex-wrap items-end gap-3 mb-6 bg-white rounded-xl border border-slate-100 shadow-sm px-5 py-4">
+      <div className="flex flex-wrap items-end gap-3 mb-6 bg-white rounded-xl border border-slate-200 shadow px-5 py-4">
 
         {/* Dealer select */}
         <div className="flex flex-col gap-1.5">
@@ -580,9 +582,9 @@ export default function DealersPage() {
           <div className="bg-slate-100 animate-pulse rounded-xl h-48" />
         </div>
       ) : (
-        <>
+        <div className="flex flex-col gap-6">
           {/* ── KPI Strip ── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <KpiCard
               icon={<TrendingUp size={16} className="text-indigo-500" />}
               label="Total Spend"
@@ -618,7 +620,7 @@ export default function DealersPage() {
           </div>
 
           {/* ── Google Ads Table ── */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-6">
+          <div className="bg-white rounded-xl border border-slate-200 shadow overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
@@ -641,7 +643,7 @@ export default function DealersPage() {
           </div>
 
           {/* ── Facebook Ads Table ── */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-6">
+          <div className="bg-white rounded-xl border border-slate-200 shadow overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
@@ -664,7 +666,7 @@ export default function DealersPage() {
           </div>
 
           {/* ── Instagram Ads Table ── */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-6">
+          <div className="bg-white rounded-xl border border-slate-200 shadow overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
@@ -688,8 +690,8 @@ export default function DealersPage() {
           </div>
 
           {/* ── Conversions Section ── */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between border-l-4 border-emerald-500 pl-3 mb-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow p-6">
+            <div className="flex items-center justify-between border-l-4 border-emerald-500 pl-3 mb-6">
               <span className="text-sm font-semibold text-slate-800">Conversions &amp; Website Activity</span>
               <span className="text-xs text-slate-400">Real-time conversion tracking</span>
             </div>
@@ -701,12 +703,14 @@ export default function DealersPage() {
                 label="Driving Directions"
                 value={formatNumber(conversions.directions)}
                 subtitle="From Google Ads"
+                bgClass="bg-slate-50"
               />
               <KpiCard
                 icon={<MapPin size={16} className="text-emerald-500" />}
                 label="Store Visits"
                 value={formatNumber(conversions.storeVisits)}
                 subtitle="From Google Ads"
+                bgClass="bg-slate-50"
               />
             </div>
 
@@ -714,7 +718,7 @@ export default function DealersPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
               {/* Website Visits & User Journey */}
-              <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+              <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4">
                 <h3 className="text-sm font-semibold text-slate-800 mb-3">Website Visits &amp; User Journey</h3>
                 <table className="w-full">
                   <tbody>
@@ -754,7 +758,7 @@ export default function DealersPage() {
               </div>
 
               {/* Call Summary */}
-              <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+              <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4">
                 <h3 className="text-sm font-semibold text-slate-800">Call Summary</h3>
                 <p className="text-xs text-slate-400 mb-3">Dashlog call data (coming soon)</p>
                 <div className="overflow-x-auto">
@@ -799,7 +803,7 @@ export default function DealersPage() {
 
           {/* ── Ad Creatives (only when a dealer is selected) ── */}
           {selectedDealerId && (
-            <div className="mb-6">
+            <div>
               <div className="flex items-center justify-between border-l-4 border-pink-500 pl-3 mb-4">
                 <span className="text-sm font-semibold text-slate-800">Ad Creatives</span>
                 <span className="text-xs text-slate-400">Currently running campaigns</span>
@@ -851,7 +855,7 @@ export default function DealersPage() {
               )}
             </div>
           )}
-        </>
+        </div>
       )}
       </div>
     </div>
