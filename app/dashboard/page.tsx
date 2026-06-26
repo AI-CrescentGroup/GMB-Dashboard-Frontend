@@ -57,6 +57,7 @@ const STATE_OPTIONS = [
 ]
 
 const KPI_OPTIONS = [
+  { value: 'calls_received', label: 'Calls' },
   { value: 'driving_directions', label: 'Driving Directions' },
   { value: 'website_visits', label: 'Website Visits' },
   { value: 'impressions', label: 'Impressions' },
@@ -137,25 +138,35 @@ function KpiCard({
 function CustomTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null
   const entry = payload[0]
-  const isSingleMonth = false
-  const selectedKpi = payload[2] ?? 'driving_directions'
-
   if (!entry) return null
+  const data = entry.payload
 
-  if (selectedKpi === 'spend_inr') {
+  // Calls pie tooltip — show breakdown
+  if (data?.answered !== undefined && data?.missed !== undefined) {
     return (
-      <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-3 text-xs space-y-1">
-        <p className="font-semibold text-slate-800">{entry.name}</p>
-        <p className="text-slate-600">Total Spent: <span className="font-medium text-slate-900 ml-1">{formatCurrency(entry.value)}</span></p>
-        <p className="text-slate-400">Planned: —</p>
-        <p className="text-slate-400">Achievement: —</p>
+      <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-3 text-xs space-y-1 min-w-[140px]">
+        <p className="font-semibold text-slate-800 mb-1">{data.name}</p>
+        <p className="text-slate-600">Total: <span className="font-medium text-slate-900">{formatNumber(data.value)}</span></p>
+        <p className="text-slate-600">Answered: <span className="font-medium text-emerald-600">{formatNumber(data.answered)}</span></p>
+        <p className="text-slate-600">Missed: <span className="font-medium text-red-500">{formatNumber(data.missed)}</span></p>
       </div>
     )
   }
 
+  // Spend tooltip
+  if (entry.name === 'spend_inr' || data?.name === 'spend_inr') {
+    return (
+      <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-3 text-xs space-y-1">
+        <p className="font-semibold text-slate-800">{entry.name}</p>
+        <p className="text-slate-600">Total Spent: <span className="font-medium text-slate-900 ml-1">{formatCurrency(entry.value)}</span></p>
+      </div>
+    )
+  }
+
+  // Default tooltip
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-3 text-xs">
-      <p className="font-semibold text-slate-800 mb-1">{entry.name}</p>
+      <p className="font-semibold text-slate-800 mb-1">{data?.name ?? entry.name}</p>
       <p className="text-slate-600">{entry.value ? formatNumber(entry.value) : '—'}</p>
     </div>
   )
@@ -283,31 +294,65 @@ export default function OverviewPage() {
 
   const zonePieData = useMemo((): { name: string; value: number }[] => {
     const agg: Record<string, number> = {}
-    metrics.forEach((row: any) => {
-      if (selectedChartMonth !== 'all' && !row.metric_date?.startsWith(selectedChartMonth)) return
-      const dealer = dealersMap[row.dealer_id]
-      if (!dealer?.zone) return
-      agg[dealer.zone] = (agg[dealer.zone] || 0) + ((row[selectedKpi] as number) || 0)
-    })
-    return Object.entries(agg)
-      .map(([name, value]) => ({ name, value }))
-      .filter((e) => e.value > 0)
-      .sort((a, b) => b.value - a.value)
-  }, [metrics, dealersMap, selectedKpi, selectedChartMonth])
+    if (selectedKpi === 'calls_received') {
+      const answeredAgg: Record<string, number> = {}
+      const missedAgg: Record<string, number> = {}
+      overviewCalls.forEach((r: any) => {
+        if (selectedChartMonth !== 'all' && r.month !== selectedChartMonth) return
+        const dealer = dealersMap[r.dealer_id]
+        if (!dealer?.zone) return
+        agg[dealer.zone] = (agg[dealer.zone] || 0) + (r.calls_received || 0)
+        answeredAgg[dealer.zone] = (answeredAgg[dealer.zone] || 0) + (r.calls_answered || 0)
+        missedAgg[dealer.zone] = (missedAgg[dealer.zone] || 0) + (r.calls_missed || 0)
+      })
+      return Object.entries(agg)
+        .map(([name, value]) => ({ name, value, answered: answeredAgg[name] || 0, missed: missedAgg[name] || 0 }))
+        .filter((e) => e.value > 0)
+        .sort((a, b) => b.value - a.value)
+    } else {
+      metrics.forEach((row: any) => {
+        if (selectedChartMonth !== 'all' && !row.metric_date?.startsWith(selectedChartMonth)) return
+        const dealer = dealersMap[row.dealer_id]
+        if (!dealer?.zone) return
+        agg[dealer.zone] = (agg[dealer.zone] || 0) + ((row[selectedKpi] as number) || 0)
+      })
+      return Object.entries(agg)
+        .map(([name, value]) => ({ name, value }))
+        .filter((e) => e.value > 0)
+        .sort((a, b) => b.value - a.value)
+    }
+  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth])
 
   const tierPieData = useMemo((): { name: string; value: number }[] => {
     const agg: Record<string, number> = {}
-    metrics.forEach((row: any) => {
-      if (selectedChartMonth !== 'all' && !row.metric_date?.startsWith(selectedChartMonth)) return
-      const dealer = dealersMap[row.dealer_id]
-      if (!dealer?.market) return
-      agg[dealer.market] = (agg[dealer.market] || 0) + ((row[selectedKpi] as number) || 0)
-    })
-    return Object.entries(agg)
-      .map(([name, value]) => ({ name, value }))
-      .filter((e) => e.value > 0)
-      .sort((a, b) => b.value - a.value)
-  }, [metrics, dealersMap, selectedKpi, selectedChartMonth])
+    if (selectedKpi === 'calls_received') {
+      const answeredAgg: Record<string, number> = {}
+      const missedAgg: Record<string, number> = {}
+      overviewCalls.forEach((r: any) => {
+        if (selectedChartMonth !== 'all' && r.month !== selectedChartMonth) return
+        const dealer = dealersMap[r.dealer_id]
+        if (!dealer?.market) return
+        agg[dealer.market] = (agg[dealer.market] || 0) + (r.calls_received || 0)
+        answeredAgg[dealer.market] = (answeredAgg[dealer.market] || 0) + (r.calls_answered || 0)
+        missedAgg[dealer.market] = (missedAgg[dealer.market] || 0) + (r.calls_missed || 0)
+      })
+      return Object.entries(agg)
+        .map(([name, value]) => ({ name, value, answered: answeredAgg[name] || 0, missed: missedAgg[name] || 0 }))
+        .filter((e) => e.value > 0)
+        .sort((a, b) => b.value - a.value)
+    } else {
+      metrics.forEach((row: any) => {
+        if (selectedChartMonth !== 'all' && !row.metric_date?.startsWith(selectedChartMonth)) return
+        const dealer = dealersMap[row.dealer_id]
+        if (!dealer?.market) return
+        agg[dealer.market] = (agg[dealer.market] || 0) + ((row[selectedKpi] as number) || 0)
+      })
+      return Object.entries(agg)
+        .map(([name, value]) => ({ name, value }))
+        .filter((e) => e.value > 0)
+        .sort((a, b) => b.value - a.value)
+    }
+  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth])
 
   // ── State bar chart data (by month) ────────────────────────────────────────
 
@@ -329,22 +374,40 @@ export default function OverviewPage() {
     const agg: Record<string, number> = {}
     MONTHS_FOR_CHART.forEach((m) => { agg[m.key] = 0 })
 
-    metrics.forEach((row: any) => {
-      const monthKey = row.metric_date?.substring(0, 7)
-      if (!monthKey || !agg.hasOwnProperty(monthKey)) return
-
-      const dealer = dealersMap[row.dealer_id]
-      if (!dealer?.state) return
-      if (selectedState !== 'all' && dealer.state !== selectedState) return
-
-      agg[monthKey] += ((row[selectedKpi] as number) || 0)
-    })
-
-    return MONTHS_FOR_CHART.map((m) => ({
-      month: m.label,
-      value: agg[m.key],
-    }))
-  }, [metrics, dealersMap, selectedKpi, selectedState])
+    if (selectedKpi === 'calls_received') {
+      const answeredAgg: Record<string, number> = {}
+      const missedAgg: Record<string, number> = {}
+      MONTHS_FOR_CHART.forEach((m) => { answeredAgg[m.key] = 0; missedAgg[m.key] = 0 })
+      overviewCalls.forEach((r: any) => {
+        if (!agg.hasOwnProperty(r.month)) return
+        const dealer = dealersMap[r.dealer_id]
+        if (!dealer?.state) return
+        if (selectedState !== 'all' && dealer.state !== selectedState) return
+        agg[r.month] += (r.calls_received || 0)
+        answeredAgg[r.month] += (r.calls_answered || 0)
+        missedAgg[r.month] += (r.calls_missed || 0)
+      })
+      return MONTHS_FOR_CHART.map((m) => ({
+        month: m.label,
+        value: agg[m.key],
+        answered: answeredAgg[m.key],
+        missed: missedAgg[m.key],
+      }))
+    } else {
+      metrics.forEach((row: any) => {
+        const monthKey = row.metric_date?.substring(0, 7)
+        if (!monthKey || !agg.hasOwnProperty(monthKey)) return
+        const dealer = dealersMap[row.dealer_id]
+        if (!dealer?.state) return
+        if (selectedState !== 'all' && dealer.state !== selectedState) return
+        agg[monthKey] += ((row[selectedKpi] as number) || 0)
+      })
+      return MONTHS_FOR_CHART.map((m) => ({
+        month: m.label,
+        value: agg[m.key],
+      }))
+    }
+  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedState])
 
   // Top 15 dealers (alphabetical) as placeholder
   const top15Dealers = useMemo(() => dealers.slice(0, 15), [dealers])
@@ -496,38 +559,37 @@ export default function OverviewPage() {
                   No data for selected period
                 </div>
               ) : (
-                <div className="relative">
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie
-                        data={zonePieData}
-                        cx="50%"
-                        cy="45%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={2}
-                        dataKey="value"
-                      >
-                        {zonePieData.map((entry) => (
-                          <Cell key={entry.name} fill={ZONE_COLORS[entry.name] ?? '#cbd5e1'} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend
-                        iconType="circle"
-                        iconSize={8}
-                        wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div
-                    className="absolute pointer-events-none text-center"
-                    style={{ top: '45%', left: '50%', transform: 'translate(-50%, -50%)' }}
-                  >
-                    <div className="text-lg font-bold text-slate-900">
+                <div className="flex items-center gap-4">
+                  <div className="flex flex-col justify-center min-w-[90px]">
+                    <div className="text-xl font-bold text-slate-900">
                       {fmtKpiValue(totalZone, selectedKpi)}
                     </div>
-                    <div className="text-xs text-slate-400">{kpiLabel}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">{kpiLabel}</div>
+                  </div>
+                  <div className="flex-1">
+                    <ResponsiveContainer width="100%" height={260}>
+                      <PieChart>
+                        <Pie
+                          data={zonePieData}
+                          cx="50%"
+                          cy="45%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={2}
+                          dataKey="value"
+                        >
+                          {zonePieData.map((entry) => (
+                            <Cell key={entry.name} fill={ZONE_COLORS[entry.name] ?? '#cbd5e1'} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend
+                          iconType="circle"
+                          iconSize={8}
+                          wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
               )}
@@ -541,38 +603,37 @@ export default function OverviewPage() {
                   No data for selected period
                 </div>
               ) : (
-                <div className="relative">
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie
-                        data={tierPieData}
-                        cx="50%"
-                        cy="45%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={2}
-                        dataKey="value"
-                      >
-                        {tierPieData.map((entry) => (
-                          <Cell key={entry.name} fill={TIER_COLORS[entry.name] ?? '#cbd5e1'} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend
-                        iconType="circle"
-                        iconSize={8}
-                        wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div
-                    className="absolute pointer-events-none text-center"
-                    style={{ top: '45%', left: '50%', transform: 'translate(-50%, -50%)' }}
-                  >
-                    <div className="text-lg font-bold text-slate-900">
+                <div className="flex items-center gap-4">
+                  <div className="flex flex-col justify-center min-w-[90px]">
+                    <div className="text-xl font-bold text-slate-900">
                       {fmtKpiValue(totalTier, selectedKpi)}
                     </div>
-                    <div className="text-xs text-slate-400">{kpiLabel}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">{kpiLabel}</div>
+                  </div>
+                  <div className="flex-1">
+                    <ResponsiveContainer width="100%" height={260}>
+                      <PieChart>
+                        <Pie
+                          data={tierPieData}
+                          cx="50%"
+                          cy="45%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={2}
+                          dataKey="value"
+                        >
+                          {tierPieData.map((entry) => (
+                            <Cell key={entry.name} fill={TIER_COLORS[entry.name] ?? '#cbd5e1'} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend
+                          iconType="circle"
+                          iconSize={8}
+                          wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
               )}
@@ -640,7 +701,6 @@ export default function OverviewPage() {
           <div>
             <span className="text-sm font-semibold text-slate-800">Top Performers — Call Volume</span>
           </div>
-          <span className="text-xs text-slate-400">Dashlog call data (coming soon)</span>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
