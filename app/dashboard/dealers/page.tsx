@@ -452,16 +452,16 @@ export default function DealersPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-[1200px] mx-auto px-8 py-8">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">Marketing Campaign Reports</h1>
         <span className="text-xs text-slate-400">Updated till: {latestDate}</span>
       </div>
 
       {/* ── Filter Bar ── */}
-      <div className="flex flex-wrap items-end gap-4 mb-8 bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+      <div className="flex flex-wrap items-end gap-3 mb-6 bg-white rounded-xl border border-slate-100 shadow-sm px-5 py-4">
 
         {/* Dealer select */}
         <div className="flex flex-col gap-1.5">
@@ -582,7 +582,7 @@ export default function DealersPage() {
       ) : (
         <>
           {/* ── KPI Strip ── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
             <KpiCard
               icon={<TrendingUp size={16} className="text-indigo-500" />}
               label="Total Spend"
@@ -618,7 +618,7 @@ export default function DealersPage() {
           </div>
 
           {/* ── Google Ads Table ── */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-8">
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-6">
             <div className="px-6 py-4 border-b border-slate-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
@@ -641,7 +641,7 @@ export default function DealersPage() {
           </div>
 
           {/* ── Facebook Ads Table ── */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-8">
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-6">
             <div className="px-6 py-4 border-b border-slate-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
@@ -664,7 +664,7 @@ export default function DealersPage() {
           </div>
 
           {/* ── Instagram Ads Table ── */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-8">
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-6">
             <div className="px-6 py-4 border-b border-slate-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
@@ -688,14 +688,14 @@ export default function DealersPage() {
           </div>
 
           {/* ── Conversions Section ── */}
-          <div className="mb-8">
+          <div className="mb-6">
             <div className="flex items-center justify-between border-l-4 border-emerald-500 pl-3 mb-4">
               <span className="text-sm font-semibold text-slate-800">Conversions &amp; Website Activity</span>
               <span className="text-xs text-slate-400">Real-time conversion tracking</span>
             </div>
 
             {/* Row 1: 2 KPI cards */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-2 gap-3 mb-4">
               <KpiCard
                 icon={<Navigation size={16} className="text-emerald-500" />}
                 label="Driving Directions"
@@ -711,7 +711,7 @@ export default function DealersPage() {
             </div>
 
             {/* Row 2: Website visits + Call summary side by side */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
               {/* Website Visits & User Journey */}
               <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
@@ -758,27 +758,27 @@ export default function DealersPage() {
                 <h3 className="text-sm font-semibold text-slate-800">Call Summary</h3>
                 <p className="text-xs text-slate-400 mb-3">Dashlog call data (coming soon)</p>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-sm table-fixed">
                     <thead>
                       <tr className="bg-slate-50">
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-left whitespace-nowrap w-[18%]">Month</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap w-[16%]">Calls Received</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap w-[14%]">Answered</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap w-[14%]">Missed</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap w-[14%]">Dialled</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-left whitespace-nowrap w-[24%]">Progress</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[15%]">Month</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[17%]">Calls Received</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[16%]">Answered</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[14%]">Missed</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[14%]">Dialled</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[24%]">Progress</th>
                       </tr>
                     </thead>
                     <tbody>
                       {callSummaryMonths.map((m) => (
                         <tr key={m.value} className="border-b border-slate-50">
-                          <td className="px-3 py-2 text-slate-700 w-[18%]">{m.label}</td>
-                          <td className="px-3 py-2 text-right text-slate-400 w-[16%]">—</td>
-                          <td className="px-3 py-2 text-right text-slate-400 w-[14%]">—</td>
-                          <td className="px-3 py-2 text-right text-slate-400 w-[14%]">—</td>
-                          <td className="px-3 py-2 text-right text-slate-400 w-[14%]">—</td>
-                          <td className="px-3 py-2 w-[24%]">
-                            <div className="flex items-center gap-2 min-w-[100px]">
+                          <td className="px-3 py-2 text-center text-slate-700 w-[15%]">{m.label}</td>
+                          <td className="px-3 py-2 text-center text-slate-400 w-[17%]">—</td>
+                          <td className="px-3 py-2 text-center text-slate-400 w-[16%]">—</td>
+                          <td className="px-3 py-2 text-center text-slate-400 w-[14%]">—</td>
+                          <td className="px-3 py-2 text-center text-slate-400 w-[14%]">—</td>
+                          <td className="px-3 py-2 text-center w-[24%]">
+                            <div className="flex items-center justify-center gap-2 min-w-[100px]">
                               <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-indigo-500 rounded-full"
@@ -799,7 +799,7 @@ export default function DealersPage() {
 
           {/* ── Ad Creatives (only when a dealer is selected) ── */}
           {selectedDealerId && (
-            <div className="mb-8">
+            <div className="mb-6">
               <div className="flex items-center justify-between border-l-4 border-pink-500 pl-3 mb-4">
                 <span className="text-sm font-semibold text-slate-800">Ad Creatives</span>
                 <span className="text-xs text-slate-400">Currently running campaigns</span>
