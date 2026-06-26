@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
-import { getDealers, getMetrics, getLatestMetricDate } from '@/lib/queries'
+import { getDealers, getMetrics, getLatestMetricDate, getCallMetrics, getBudgets } from '@/lib/queries'
 import { exportDealerPPT } from '@/lib/exportPPT'
 import { Select } from '@/components/ui/select'
 import {
@@ -160,11 +160,13 @@ function CampaignTable({
   dealerStatus,
   showCpm,
   isAllDealers,
+  budgetInr,
 }: {
   campaigns: ReturnType<typeof groupCampaigns>
   dealerStatus: string | null | undefined
   showCpm: boolean
   isAllDealers: boolean
+  budgetInr?: number
 }) {
   if (campaigns.length === 0) {
     return (
@@ -206,7 +208,9 @@ function CampaignTable({
             </td>
             <td className={`${TD} text-center w-[7%]`}><span className="text-slate-400">—</span></td>
             <td className={`${TD} text-center w-[10%]`}><span className="text-slate-400">—</span></td>
-            <td className={`${TD} text-right w-[7%]`}><span className="text-slate-400">—</span></td>
+            <td className={`${TD} text-right w-[7%]`}>
+              {budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
+            </td>
             <td className={`${TD} text-right w-[7%]`} title={showCpm ? "Live Meta API — coming soon" : undefined}>
               <span className="text-slate-400">{showCpm ? "—*" : "—"}</span>
             </td>
@@ -227,7 +231,9 @@ function CampaignTable({
                 <StatusBadge status={dealerStatus} />
               </td>
               <td className={`${TD} text-center w-[10%]`}><span className="text-slate-400">—</span></td>
-              <td className={`${TD} text-right w-[7%]`}><span className="text-slate-400">—</span></td>
+              <td className={`${TD} text-right w-[7%]`}>
+                {budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
+              </td>
               <td className={`${TD} text-right w-[7%]`} title={showCpm ? "Live Meta API — coming soon" : undefined}>
                 <span className="text-slate-400">{showCpm ? "—*" : "—"}</span>
               </td>
@@ -256,6 +262,8 @@ export default function DealersPage() {
   const [dateFrom, setDateFrom] = useState('2025-05-28')
   const [dateTo, setDateTo] = useState('2026-03-31')
   const [latestDate, setLatestDate] = useState('—')
+  const [callMetrics, setCallMetrics] = useState<any[]>([])
+  const [budgets, setBudgets] = useState<any[]>([])
 
   // Load dealers + latest date on mount
   useEffect(() => {
@@ -283,6 +291,23 @@ export default function DealersPage() {
     load()
     return () => { cancelled = true }
   }, [dealers, selectedDealerId, selectedMonth, dateFrom, dateTo, viewMode])
+
+  // Load call metrics whenever filters change
+  useEffect(() => {
+    if (dealers.length === 0) return
+    const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
+    const monthFrom = from.substring(0, 7)
+    const monthTo = to.substring(0, 7)
+    const ids = selectedDealerId ? [selectedDealerId] : dealers.map((d: any) => d.id)
+    getCallMetrics(ids, monthFrom, monthTo).then(setCallMetrics)
+  }, [dealers, selectedDealerId, selectedMonth, dateFrom, dateTo, viewMode])
+
+  // Load budgets whenever dealer selection changes
+  useEffect(() => {
+    if (dealers.length === 0) return
+    const ids = selectedDealerId ? [selectedDealerId] : dealers.map((d: any) => d.id)
+    getBudgets(ids).then(setBudgets)
+  }, [dealers, selectedDealerId])
 
   // ── Derived state ────────────────────────────────────────────────────────────
 
@@ -337,6 +362,35 @@ export default function DealersPage() {
     })
     return { directions, storeVisits, websiteVisits, callNumberTrack, callTrack, downloadCatalogue, driveDirection, enquiryTrack, formSubmit }
   }, [displayMetrics])
+
+  const callTotals = useMemo(() => {
+    const received = callMetrics.reduce((s: number, r: any) => s + (r.calls_received || 0), 0)
+    const answered = callMetrics.reduce((s: number, r: any) => s + (r.calls_answered || 0), 0)
+    const missed = callMetrics.reduce((s: number, r: any) => s + (r.calls_missed || 0), 0)
+    const dialled = callMetrics.reduce((s: number, r: any) => s + (r.calls_dialled || 0), 0)
+    return { received, answered, missed, dialled }
+  }, [callMetrics])
+
+  const googleBudget = useMemo(() =>
+    budgets
+      .filter((b: any) => b.platform === 'google')
+      .reduce((s: number, b: any) => s + (b.budget_inr || 0), 0),
+    [budgets]
+  )
+
+  const facebookBudget = useMemo(() =>
+    budgets
+      .filter((b: any) => b.platform === 'facebook')
+      .reduce((s: number, b: any) => s + (b.budget_inr || 0), 0),
+    [budgets]
+  )
+
+  const instagramBudget = useMemo(() =>
+    budgets
+      .filter((b: any) => b.platform === 'instagram')
+      .reduce((s: number, b: any) => s + (b.budget_inr || 0), 0),
+    [budgets]
+  )
 
   const adCreatives = useMemo(() => {
     if (!selectedDealerId) return []
@@ -612,10 +666,10 @@ export default function DealersPage() {
               value={formatNumber(kpi.websiteVisits)}
             />
             <KpiCard
-              icon={<Phone size={16} className="text-slate-300" />}
+              icon={<Phone size={16} className="text-emerald-500" />}
               label="Calls"
-              value="—"
-              note="Dashlog (coming soon)"
+              value={callTotals.received > 0 ? formatNumber(callTotals.received) : '—'}
+              subtitle={callTotals.received > 0 ? `${formatNumber(callTotals.answered)} answered` : 'No call data'}
             />
           </div>
 
@@ -638,6 +692,7 @@ export default function DealersPage() {
                 dealerStatus={selectedDealer?.campaign_status}
                 showCpm={false}
                 isAllDealers={!selectedDealerId}
+                budgetInr={googleBudget}
               />
             </div>
           </div>
@@ -661,6 +716,7 @@ export default function DealersPage() {
                 dealerStatus={selectedDealer?.campaign_status}
                 showCpm={true}
                 isAllDealers={!selectedDealerId}
+                budgetInr={facebookBudget}
               />
             </div>
           </div>
@@ -685,6 +741,7 @@ export default function DealersPage() {
                 dealerStatus={selectedDealer?.campaign_status}
                 showCpm={true}
                 isAllDealers={!selectedDealerId}
+                budgetInr={instagramBudget}
               />
             </div>
           </div>
@@ -774,26 +831,42 @@ export default function DealersPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {callSummaryMonths.map((m) => (
-                        <tr key={m.value} className="border-b border-slate-50">
-                          <td className="px-3 py-2 text-center text-slate-700 w-[15%]">{m.label}</td>
-                          <td className="px-3 py-2 text-center text-slate-400 w-[17%]">—</td>
-                          <td className="px-3 py-2 text-center text-slate-400 w-[16%]">—</td>
-                          <td className="px-3 py-2 text-center text-slate-400 w-[14%]">—</td>
-                          <td className="px-3 py-2 text-center text-slate-400 w-[14%]">—</td>
-                          <td className="px-3 py-2 text-center w-[24%]">
-                            <div className="flex items-center justify-center gap-2 min-w-[100px]">
-                              <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-indigo-500 rounded-full"
-                                  style={{ width: '0%' }}
-                                />
+                      {callSummaryMonths.map((m) => {
+                        const row = callMetrics.find((r: any) => r.month === m.value)
+                        const pct = row && row.calls_received > 0
+                          ? Math.round((row.calls_answered / row.calls_received) * 100)
+                          : 0
+                        return (
+                          <tr key={m.value} className="border-b border-slate-50">
+                            <td className="px-3 py-2 text-center text-slate-700 w-[15%]">{m.label}</td>
+                            <td className="px-3 py-2 text-center text-slate-700 w-[17%]">
+                              {row ? formatNumber(row.calls_received) : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-center text-slate-700 w-[16%]">
+                              {row ? formatNumber(row.calls_answered) : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-center text-slate-700 w-[14%]">
+                              {row ? formatNumber(row.calls_missed) : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-center text-slate-700 w-[14%]">
+                              {row ? formatNumber(row.calls_dialled) : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-center w-[24%]">
+                              <div className="flex items-center justify-center gap-2 min-w-[100px]">
+                                <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-indigo-500 rounded-full transition-all"
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-slate-500 w-8">
+                                  {row && row.calls_received > 0 ? `${pct}%` : '—'}
+                                </span>
                               </div>
-                              <span className="text-xs text-slate-400 w-6">—</span>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>

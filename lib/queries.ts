@@ -300,3 +300,35 @@ export function getTopPerformers(
 
   return result
 }
+
+// Get call metrics for specific dealer(s) and month range
+export async function getCallMetrics(
+  dealerIds: string[],
+  monthFrom: string,
+  monthTo: string
+): Promise<any[]> {
+  if (!dealerIds.length) return []
+  const { data, error } = await supabase
+    .from('call_metrics')
+    .select('dealer_id, month, calls_received, calls_answered, calls_missed, calls_dialled')
+    .in('dealer_id', dealerIds)
+    .gte('month', monthFrom)
+    .lte('month', monthTo)
+    .order('month', { ascending: true })
+  if (error) { console.error('getCallMetrics error:', error); return [] }
+  return data ?? []
+}
+
+// Get budgets for specific dealer(s)
+export async function getBudgets(
+  dealerIds: string[]
+): Promise<any[]> {
+  if (!dealerIds.length) return []
+  const { data, error } = await supabase
+    .from('budgets')
+    .select('dealer_id, platform, budget_inr')
+    .in('dealer_id', dealerIds)
+    .is('month', null)
+  if (error) { console.error('getBudgets error:', error); return [] }
+  return data ?? []
+}

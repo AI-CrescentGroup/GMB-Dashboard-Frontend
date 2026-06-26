@@ -5,7 +5,7 @@ import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { getDealers, getMetrics } from '@/lib/queries'
+import { getDealers, getMetrics, getCallMetrics, getBudgets } from '@/lib/queries'
 import { TrendingUp, MapPin, Activity, Phone, Navigation, Eye, Zap } from 'lucide-react'
 
 const DATE_FROM = '2025-05-28'
@@ -167,6 +167,8 @@ export default function OverviewPage() {
   const [dealers, setDealers] = useState<any[]>([])
   const [metrics, setMetrics] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [overviewCalls, setOverviewCalls] = useState<any[]>([])
+  const [overviewBudgets, setOverviewBudgets] = useState<any[]>([])
 
   // chart controls
   const [selectedKpi, setSelectedKpi] = useState('driving_directions')
@@ -184,6 +186,10 @@ export default function OverviewPage() {
         const dealerIds = allDealers.map((d: any) => d.id)
         const data = await getMetrics(dealerIds, DATE_FROM, DATE_TO, [])
         if (!cancelled) setMetrics(data)
+        const calls = await getCallMetrics(dealerIds, '2025-05', '2026-03')
+        if (!cancelled) setOverviewCalls(calls)
+        const budgets = await getBudgets(dealerIds)
+        if (!cancelled) setOverviewBudgets(budgets)
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -221,8 +227,9 @@ export default function OverviewPage() {
     const avgCpc = googleClicks > 0 ? googleSpend / googleClicks : 0
     const avgCpm = metaImpressions > 0 ? (metaSpend / metaImpressions) * 1000 : 0
     const overallCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0
+    const totalSpend = googleSpend + metaSpend
 
-    return { directions, storeVisits, websiteVisits, avgCpc, avgCpm, overallCtr }
+    return { directions, storeVisits, websiteVisits, avgCpc, avgCpm, overallCtr, totalSpend }
   }, [metrics])
 
   // ── Dealer lookup map ─────────────────────────────────────────────────────────
@@ -240,6 +247,37 @@ export default function OverviewPage() {
     })
     return map
   }, [dealers])
+
+  // ── Top Performers (calls) ─────────────────────────────────────────────────────
+
+  const topPerformers = useMemo(() => {
+    const byDealer: Record<string, any> = {}
+    overviewCalls.forEach((r: any) => {
+      if (!byDealer[r.dealer_id]) {
+        byDealer[r.dealer_id] = {
+          dealer_id: r.dealer_id,
+          calls_received: 0,
+          calls_answered: 0,
+          calls_missed: 0,
+        }
+      }
+      byDealer[r.dealer_id].calls_received += r.calls_received || 0
+      byDealer[r.dealer_id].calls_answered += r.calls_answered || 0
+      byDealer[r.dealer_id].calls_missed += r.calls_missed || 0
+    })
+    return Object.values(byDealer)
+      .map((d: any) => {
+        const dealer = dealers.find((od: any) => od.id === d.dealer_id)
+        return {
+          ...d,
+          dealer_name: dealer?.dealer_name ?? '—',
+          zone: dealer?.zone ?? '—',
+          tier: dealer?.market ?? '—',
+        }
+      })
+      .sort((a: any, b: any) => b.calls_received - a.calls_received)
+      .slice(0, 15)
+  }, [overviewCalls, dealers])
 
   // ── Pie chart data ────────────────────────────────────────────────────────────
 
@@ -344,10 +382,9 @@ export default function OverviewPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {/* Row 1 */}
           <KpiCard
-            icon={<Phone size={16} className="text-slate-300" />}
+            icon={<Phone size={16} className="text-emerald-500" />}
             label="Calls"
-            value="—"
-            note="Dashlog (coming soon)"
+            value={formatNumber(overviewCalls.reduce((s: number, r: any) => s + (r.calls_received || 0), 0))}
           />
           <KpiCard
             icon={<MapPin size={16} className="text-emerald-500" />}
@@ -385,10 +422,24 @@ export default function OverviewPage() {
             suffix="%"
           />
           <KpiCard
-            icon={<TrendingUp size={16} className="text-slate-300" />}
+            icon={<TrendingUp size={16} className="text-indigo-500" />}
             label="Spend vs Planned"
-            value="—/—"
-            note="Budget data pending"
+            value={(() => {
+              const totalBudget = overviewBudgets
+                .filter((b: any) => b.platform === 'total')
+                .reduce((s: number, b: any) => s + (b.budget_inr || 0), 0)
+              return totalBudget > 0
+                ? `${formatCurrency(kpi.totalSpend)} / ${formatCurrency(totalBudget)}`
+                : '—'
+            })()}
+            subtitle={(() => {
+              const totalBudget = overviewBudgets
+                .filter((b: any) => b.platform === 'total')
+                .reduce((s: number, b: any) => s + (b.budget_inr || 0), 0)
+              if (totalBudget === 0) return 'No budget data'
+              const pct = ((kpi.totalSpend / totalBudget) * 100).toFixed(1)
+              return `${pct}% of planned budget`
+            })()}
           />
         </div>
       )}
@@ -628,43 +679,36 @@ export default function OverviewPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {top15Dealers.length === 0 ? (
+                  {topPerformers.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="text-center py-12 text-slate-400">
                         No data for selected period
                       </td>
                     </tr>
                   ) : (
-                    top15Dealers.map((dealer: any, i: number) => {
-                      const answered = dealer.answered ?? '—'
-                      const calls = dealer.calls ?? '—'
-                      let progressPct = 0
-                      if (answered !== '—' && calls !== '—') {
-                        const a = Number(answered)
-                        const c = Number(calls)
-                        if (!isNaN(a) && !isNaN(c) && c > 0) {
-                          progressPct = Math.min((a / c) * 100, 100)
-                        }
-                      }
+                    topPerformers.map((d: any, i: number) => {
+                      const pct = d.calls_received > 0
+                        ? Math.round((d.calls_answered / d.calls_received) * 100)
+                        : 0
                       return (
-                        <tr key={dealer.id} className="hover:bg-slate-50 transition-colors">
+                        <tr key={d.dealer_id} className="hover:bg-slate-50 transition-colors">
                           <td className="px-4 py-3 text-slate-400 text-xs font-mono border-b border-slate-50">{i + 1}</td>
-                          <td className="px-4 py-3 font-medium text-slate-900 text-sm border-b border-slate-50 truncate">{dealer.dealer_name}</td>
-                          <td className="px-4 py-3 text-slate-500 text-sm border-b border-slate-50">{dealer.zone || '—'}</td>
-                          <td className="px-4 py-3 text-slate-400 text-sm text-right border-b border-slate-50">—</td>
-                          <td className="px-4 py-3 text-slate-400 text-sm text-right border-b border-slate-50">—</td>
-                          <td className="px-4 py-3 text-slate-400 text-sm text-right border-b border-slate-50">—</td>
-                          <td className="px-4 py-3 text-slate-400 text-sm text-right border-b border-slate-50">—</td>
+                          <td className="px-4 py-3 font-medium text-slate-900 text-sm border-b border-slate-50 truncate">{d.dealer_name}</td>
+                          <td className="px-4 py-3 text-slate-500 text-sm border-b border-slate-50">{d.zone}</td>
+                          <td className="px-4 py-3 text-slate-500 text-sm text-right border-b border-slate-50">{d.tier}</td>
+                          <td className="px-4 py-3 text-slate-700 text-sm text-right border-b border-slate-50">{formatNumber(d.calls_received)}</td>
+                          <td className="px-4 py-3 text-slate-700 text-sm text-right border-b border-slate-50">{formatNumber(d.calls_answered)}</td>
+                          <td className="px-4 py-3 text-slate-700 text-sm text-right border-b border-slate-50">{formatNumber(d.calls_missed)}</td>
                           <td className="px-4 py-3 border-b border-slate-50">
                             <div className="flex items-center gap-2 min-w-[120px]">
                               <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-indigo-500 rounded-full transition-all"
-                                  style={{ width: `${progressPct}%` }}
+                                  style={{ width: `${pct}%` }}
                                 />
                               </div>
-                              <span className="text-xs text-slate-400 w-8 text-right">
-                                {progressPct > 0 ? `${progressPct.toFixed(0)}%` : '—'}
+                              <span className="text-xs text-slate-500 w-8 text-right">
+                                {pct > 0 ? `${pct}%` : '—'}
                               </span>
                             </div>
                           </td>
