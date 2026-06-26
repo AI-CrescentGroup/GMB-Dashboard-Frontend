@@ -308,15 +308,25 @@ export async function getCallMetrics(
   monthTo: string
 ): Promise<any[]> {
   if (!dealerIds.length) return []
-  const { data, error } = await supabase
-    .from('call_metrics')
-    .select('dealer_id, month, calls_received, calls_answered, calls_missed, calls_dialled')
-    .in('dealer_id', dealerIds)
-    .gte('month', monthFrom)
-    .lte('month', monthTo)
-    .order('month', { ascending: true })
-  if (error) { console.error('getCallMetrics error:', error); return [] }
-  return data ?? []
+  let allData: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .from('call_metrics')
+      .select('dealer_id, month, calls_received, calls_answered, calls_missed, calls_dialled')
+      .in('dealer_id', dealerIds)
+      .gte('month', monthFrom)
+      .lte('month', monthTo)
+      .order('month', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) { console.error('getCallMetrics error:', error); return [] }
+    if (!data || data.length === 0) break
+    allData = allData.concat(data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return allData
 }
 
 // Get budgets for specific dealer(s)

@@ -264,6 +264,7 @@ export default function OverviewPage() {
   const topPerformers = useMemo(() => {
     const byDealer: Record<string, any> = {}
     overviewCalls.forEach((r: any) => {
+      if (selectedChartMonth !== 'all' && r.month !== selectedChartMonth) return
       if (!byDealer[r.dealer_id]) {
         byDealer[r.dealer_id] = {
           dealer_id: r.dealer_id,
@@ -288,7 +289,7 @@ export default function OverviewPage() {
       })
       .sort((a: any, b: any) => b.calls_received - a.calls_received)
       .slice(0, 15)
-  }, [overviewCalls, dealers])
+  }, [overviewCalls, dealers, selectedChartMonth])
 
   // ── Pie chart data ────────────────────────────────────────────────────────────
 
