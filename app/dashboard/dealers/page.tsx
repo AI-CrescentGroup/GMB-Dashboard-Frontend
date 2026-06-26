@@ -180,67 +180,60 @@ function CampaignTable({
   const campaignCount = campaigns.length
 
   return (
-    <table className="w-full text-sm">
+    <table className="w-full table-fixed text-sm">
       <thead>
         <tr className="bg-slate-50">
-          <th className={`${TH} text-left`}>Campaign Name</th>
-          <th className={TH}>Status</th>
-          <th className={TH}>Period</th>
-          <th className={TH}>Budget</th>
-          {showCpm && <th className={TH}>Reach</th>}
-          <th className={TH}>Impressions</th>
-          {!showCpm && <th className={TH}>Clicks</th>}
-          <th className={TH}>CTR %</th>
-          {showCpm ? <th className={TH}>CPM ₹</th> : <th className={TH}>CPC ₹</th>}
-          {showCpm && <th className={TH}>Link Clicks</th>}
-          <th className={TH}>Spend ₹</th>
+          <th className={`${TH} text-left w-[28%]`}>Campaign Name</th>
+          <th className={`${TH} text-center w-[7%]`}>Status</th>
+          <th className={`${TH} text-center w-[10%]`}>Period</th>
+          <th className={`${TH} text-right w-[7%]`}>Budget</th>
+          <th className={`${TH} text-right w-[7%]`}>Reach</th>
+          <th className={`${TH} text-right w-[9%]`}>Impressions</th>
+          <th className={`${TH} text-right w-[7%]`}>CTR %</th>
+          <th className={`${TH} text-right w-[8%]`}>{showCpm ? 'CPM ₹' : 'CPC ₹'}</th>
+          <th className={`${TH} text-right w-[8%]`}>Link Clicks</th>
+          <th className={`${TH} text-right w-[9%]`}>Spend ₹</th>
         </tr>
       </thead>
       <tbody>
         {isAllDealers ? (
           // All Dealers mode: single aggregated summary row
           <tr className="hover:bg-slate-50 transition-colors">
-            <td className={`${TD} text-left`}>
+            <td className={`${TD} text-left w-[28%]`}>
               <span className="text-slate-500 italic">{campaignCount} campaigns</span>
             </td>
-            <td className={TD}><span className="text-slate-400">—</span></td>
-            <td className={TD}><span className="text-slate-400">—</span></td>
-            <td className={TD}><span className="text-slate-400">—</span></td>
-            {showCpm && (
-              <td className={TD} title="Live Meta API — coming soon">
-                <span className="text-slate-400">—*</span>
-              </td>
-            )}
-            <td className={TD}>{formatNumber(totalImpressions)}</td>
-            {!showCpm && <td className={TD}>{formatNumber(totalClicks)}</td>}
-            <td className={TD}>{summaryCtr}%</td>
-            {showCpm ? <td className={TD}>₹{summaryCpm}</td> : <td className={TD}>₹{summaryCpc}</td>}
-            {showCpm && <td className={TD}>{formatNumber(totalClicks)}</td>}
-            <td className={TD}>{formatCurrency(totalSpend)}</td>
+            <td className={`${TD} text-center w-[7%]`}><span className="text-slate-400">—</span></td>
+            <td className={`${TD} text-center w-[10%]`}><span className="text-slate-400">—</span></td>
+            <td className={`${TD} text-right w-[7%]`}><span className="text-slate-400">—</span></td>
+            <td className={`${TD} text-right w-[7%]`} title={showCpm ? "Live Meta API — coming soon" : undefined}>
+              <span className="text-slate-400">{showCpm ? "—*" : "—"}</span>
+            </td>
+            <td className={`${TD} text-right w-[9%]`}>{formatNumber(totalImpressions)}</td>
+            <td className={`${TD} text-right w-[7%]`}>{summaryCtr}%</td>
+            <td className={`${TD} text-right w-[8%]`}>₹{showCpm ? summaryCpm : summaryCpc}</td>
+            <td className={`${TD} text-right w-[8%]`}>{formatNumber(totalClicks)}</td>
+            <td className={`${TD} text-right w-[9%]`}>{formatCurrency(totalSpend)}</td>
           </tr>
         ) : (
           // Single dealer mode: one row per campaign
           campaigns.map((c, i) => (
             <tr key={i} className="hover:bg-slate-50 transition-colors">
-              <td className={`${TD} text-left font-medium text-slate-900 max-w-xs`}>
-                <span className="block truncate max-w-xs">{c.name}</span>
+              <td className={`${TD} text-left font-medium text-slate-900 w-[28%] truncate max-w-0`}>
+                <span className="block truncate" title={c.name}>{c.name}</span>
               </td>
-              <td className={TD}>
+              <td className={`${TD} text-center w-[7%]`}>
                 <StatusBadge status={dealerStatus} />
               </td>
-              <td className={TD}><span className="text-slate-400">—</span></td>
-              <td className={TD}><span className="text-slate-400">—</span></td>
-              {showCpm && (
-                <td className={TD} title="Live Meta API — coming soon">
-                  <span className="text-slate-400">—*</span>
-                </td>
-              )}
-              <td className={TD}>{formatNumber(c.impressions)}</td>
-              {!showCpm && <td className={TD}>{formatNumber(c.clicks)}</td>}
-              <td className={TD}>{c.ctr}%</td>
-              {showCpm ? <td className={TD}>₹{c.cpm}</td> : <td className={TD}>₹{c.cpc}</td>}
-              {showCpm && <td className={TD}>{formatNumber(c.clicks)}</td>}
-              <td className={TD}>{formatCurrency(c.spend)}</td>
+              <td className={`${TD} text-center w-[10%]`}><span className="text-slate-400">—</span></td>
+              <td className={`${TD} text-right w-[7%]`}><span className="text-slate-400">—</span></td>
+              <td className={`${TD} text-right w-[7%]`} title={showCpm ? "Live Meta API — coming soon" : undefined}>
+                <span className="text-slate-400">{showCpm ? "—*" : "—"}</span>
+              </td>
+              <td className={`${TD} text-right w-[9%]`}>{formatNumber(c.impressions)}</td>
+              <td className={`${TD} text-right w-[7%]`}>{c.ctr}%</td>
+              <td className={`${TD} text-right w-[8%]`}>₹{showCpm ? c.cpm : c.cpc}</td>
+              <td className={`${TD} text-right w-[8%]`}>{formatNumber(c.clicks)}</td>
+              <td className={`${TD} text-right w-[9%]`}>{formatCurrency(c.spend)}</td>
             </tr>
           ))
         )}
@@ -458,7 +451,8 @@ export default function DealersPage() {
   // ── JSX ──────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="mx-auto max-w-[1440px] px-6 lg:px-8 py-6 lg:py-8 space-y-6">
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
@@ -467,17 +461,17 @@ export default function DealersPage() {
       </div>
 
       {/* ── Filter Bar ── */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 flex items-end gap-4 flex-wrap">
+      <div className="flex flex-wrap items-end gap-4 mb-8 bg-white rounded-xl border border-slate-100 shadow-sm p-5">
 
         {/* Dealer select */}
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
             Select Dealer
           </label>
           <Select
             value={selectedDealerId}
             onChange={(e) => setSelectedDealerId(e.target.value)}
-            className="w-full h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none"
+            className="min-w-[280px] h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none"
           >
             <option value="">-- All Dealers (Aggregated) --</option>
             {dealers.map((d: any) => (
@@ -488,14 +482,14 @@ export default function DealersPage() {
 
         {/* Month or date inputs */}
         {viewMode === 'monthly' ? (
-          <div className="flex-1 min-w-[150px]">
-            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
               Month
             </label>
             <Select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none"
+              className="min-w-[200px] h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none"
             >
               {MONTH_OPTIONS.map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
@@ -504,34 +498,34 @@ export default function DealersPage() {
           </div>
         ) : (
           <>
-            <div className="flex-1 min-w-[140px]">
-              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
                 From Date
               </label>
               <input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none"
+                className="min-w-[140px] px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none"
               />
             </div>
-            <div className="flex-1 min-w-[140px]">
-              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
                 To Date
               </label>
               <input
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="w-full px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none"
+                className="min-w-[140px] px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none"
               />
             </div>
           </>
         )}
 
         {/* Toggle */}
-        <div>
-          <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 invisible">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide invisible">
             View
           </label>
           <div className="flex gap-1 h-9 bg-slate-100 rounded-lg p-1">
@@ -559,8 +553,8 @@ export default function DealersPage() {
         </div>
 
         {/* Download PPT */}
-        <div className="ml-auto">
-          <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 invisible">
+        <div className="ml-auto flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide invisible">
             Export
           </label>
           <button
@@ -588,7 +582,7 @@ export default function DealersPage() {
       ) : (
         <>
           {/* ── KPI Strip ── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
             <KpiCard
               icon={<TrendingUp size={16} className="text-indigo-500" />}
               label="Total Spend"
@@ -624,19 +618,19 @@ export default function DealersPage() {
           </div>
 
           {/* ── Google Ads Table ── */}
-          <div>
-            <SectionHeader
-              left={
-                <>
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-8">
+            <div className="px-6 py-4 border-b border-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
                   <span className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
                     G
                   </span>
                   <span className="text-sm font-semibold text-slate-800">Google Ads</span>
-                </>
-              }
-              right="Campaign performance for selected period"
-            />
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                </div>
+                <span className="text-xs text-slate-400">Campaign performance for selected period</span>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
               <CampaignTable
                 campaigns={googleCampaigns}
                 dealerStatus={selectedDealer?.campaign_status}
@@ -647,19 +641,19 @@ export default function DealersPage() {
           </div>
 
           {/* ── Facebook Ads Table ── */}
-          <div>
-            <SectionHeader
-              left={
-                <>
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-8">
+            <div className="px-6 py-4 border-b border-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
                   <span className="w-5 h-5 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
                     f
                   </span>
                   <span className="text-sm font-semibold text-slate-800">Facebook Ads</span>
-                </>
-              }
-              right="Campaign performance for selected period"
-            />
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                </div>
+                <span className="text-xs text-slate-400">Campaign performance for selected period</span>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
               <CampaignTable
                 campaigns={facebookCampaigns}
                 dealerStatus={selectedDealer?.campaign_status}
@@ -670,20 +664,20 @@ export default function DealersPage() {
           </div>
 
           {/* ── Instagram Ads Table ── */}
-          <div>
-            <SectionHeader
-              left={
-                <>
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden mb-8">
+            <div className="px-6 py-4 border-b border-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
                   <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
                     style={{ background: 'linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)' }}>
                     IG
                   </span>
                   <span className="text-sm font-semibold text-slate-800">Instagram Ads</span>
-                </>
-              }
-              right="Campaign performance for selected period"
-            />
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                </div>
+                <span className="text-xs text-slate-400">Campaign performance for selected period</span>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
               <CampaignTable
                 campaigns={instagramCampaigns}
                 dealerStatus={selectedDealer?.campaign_status}
@@ -694,14 +688,14 @@ export default function DealersPage() {
           </div>
 
           {/* ── Conversions Section ── */}
-          <div>
-            <SectionHeader
-              left={<span className="text-sm font-semibold text-slate-800">Conversions &amp; Website Activity</span>}
-              borderColor="border-emerald-500"
-            />
+          <div className="mb-8">
+            <div className="flex items-center justify-between border-l-4 border-emerald-500 pl-3 mb-4">
+              <span className="text-sm font-semibold text-slate-800">Conversions &amp; Website Activity</span>
+              <span className="text-xs text-slate-400">Real-time conversion tracking</span>
+            </div>
 
             {/* Row 1: 2 KPI cards */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-2 gap-4 mb-6">
               <KpiCard
                 icon={<Navigation size={16} className="text-emerald-500" />}
                 label="Driving Directions"
@@ -767,21 +761,33 @@ export default function DealersPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-slate-50">
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-left whitespace-nowrap">Month</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap">Calls Received</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap">Answered</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap">Missed</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap">Dialled</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-left whitespace-nowrap w-[18%]">Month</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap w-[16%]">Calls Received</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap w-[14%]">Answered</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap w-[14%]">Missed</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-right whitespace-nowrap w-[14%]">Dialled</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-left whitespace-nowrap w-[24%]">Progress</th>
                       </tr>
                     </thead>
                     <tbody>
                       {callSummaryMonths.map((m) => (
                         <tr key={m.value} className="border-b border-slate-50">
-                          <td className="px-3 py-2 text-slate-700">{m.label}</td>
-                          <td className="px-3 py-2 text-right text-slate-400">—</td>
-                          <td className="px-3 py-2 text-right text-slate-400">—</td>
-                          <td className="px-3 py-2 text-right text-slate-400">—</td>
-                          <td className="px-3 py-2 text-right text-slate-400">—</td>
+                          <td className="px-3 py-2 text-slate-700 w-[18%]">{m.label}</td>
+                          <td className="px-3 py-2 text-right text-slate-400 w-[16%]">—</td>
+                          <td className="px-3 py-2 text-right text-slate-400 w-[14%]">—</td>
+                          <td className="px-3 py-2 text-right text-slate-400 w-[14%]">—</td>
+                          <td className="px-3 py-2 text-right text-slate-400 w-[14%]">—</td>
+                          <td className="px-3 py-2 w-[24%]">
+                            <div className="flex items-center gap-2 min-w-[100px]">
+                              <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-indigo-500 rounded-full"
+                                  style={{ width: '0%' }}
+                                />
+                              </div>
+                              <span className="text-xs text-slate-400 w-6">—</span>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -793,12 +799,11 @@ export default function DealersPage() {
 
           {/* ── Ad Creatives (only when a dealer is selected) ── */}
           {selectedDealerId && (
-            <div>
-              <SectionHeader
-                left={<span className="text-sm font-semibold text-slate-800">Ad Creatives</span>}
-                right="Currently running campaigns"
-                borderColor="border-pink-500"
-              />
+            <div className="mb-8">
+              <div className="flex items-center justify-between border-l-4 border-pink-500 pl-3 mb-4">
+                <span className="text-sm font-semibold text-slate-800">Ad Creatives</span>
+                <span className="text-xs text-slate-400">Currently running campaigns</span>
+              </div>
               {adCreatives.length === 0 ? (
                 <div className="text-center py-12 text-slate-400 text-sm">
                   No campaigns for selected period
@@ -848,6 +853,7 @@ export default function DealersPage() {
           )}
         </>
       )}
+      </div>
     </div>
   )
 }
