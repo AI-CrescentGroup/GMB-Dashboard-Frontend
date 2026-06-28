@@ -342,3 +342,23 @@ export async function getBudgets(
   if (error) { console.error('getBudgets error:', error); return [] }
   return data ?? []
 }
+
+// Get ad creatives for a specific dealer, grouped by platform
+export async function getAdCreatives(dealerId: string): Promise<{
+  google: any[];
+  facebook: any[];
+  instagram: any[];
+}> {
+  const { data, error } = await supabase
+    .from('ad_creatives')
+    .select('id, platform, campaign_name, ad_name, headline, description, storage_url, creative_type, status')
+    .eq('dealer_id', dealerId)
+    .order('platform', { ascending: true })
+  if (error) { console.error('getAdCreatives error:', error); return { google: [], facebook: [], instagram: [] } }
+  const rows = data ?? []
+  return {
+    google:    rows.filter(r => r.platform === 'google'),
+    facebook:  rows.filter(r => r.platform === 'facebook'),
+    instagram: rows.filter(r => r.platform === 'instagram'),
+  }
+}

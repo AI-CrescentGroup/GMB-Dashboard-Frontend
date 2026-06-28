@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
-import { getDealers, getMetrics, getLatestMetricDate, getCallMetrics, getBudgets } from '@/lib/queries'
+import { getDealers, getMetrics, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives } from '@/lib/queries'
 import { exportDealerPPT } from '@/lib/exportPPT'
 import { Select } from '@/components/ui/select'
 import {
@@ -292,6 +292,8 @@ export default function DealersPage() {
   const [latestDate, setLatestDate] = useState('—')
   const [callMetrics, setCallMetrics] = useState<any[]>([])
   const [budgets, setBudgets] = useState<any[]>([])
+  const [creativesData, setCreativesData] = useState<{ google: any[]; facebook: any[]; instagram: any[] }>({ google: [], facebook: [], instagram: [] })
+  const [creativesLoading, setCreativesLoading] = useState(false)
 
   // Load dealers + latest date on mount
   useEffect(() => {
@@ -336,6 +338,18 @@ export default function DealersPage() {
     const ids = selectedDealerId ? [selectedDealerId] : dealers.map((d: any) => d.id)
     getBudgets(ids).then(setBudgets)
   }, [dealers, selectedDealerId])
+
+  useEffect(() => {
+    if (!selectedDealerId) {
+      setCreativesData({ google: [], facebook: [], instagram: [] })
+      return
+    }
+    setCreativesLoading(true)
+    getAdCreatives(selectedDealerId)
+      .then(data => setCreativesData(data))
+      .catch(err => console.error('creatives fetch error:', err))
+      .finally(() => setCreativesLoading(false))
+  }, [selectedDealerId])
 
   // ── Derived state ────────────────────────────────────────────────────────────
 
@@ -435,26 +449,6 @@ export default function DealersPage() {
       .reduce((s: number, b: any) => s + (b.budget_inr || 0), 0),
     [budgets]
   )
-
-  const adCreatives = useMemo(() => {
-    if (!selectedDealerId) return []
-    const seen = new Set<string>()
-    const result: { name: string; platform: string }[] = []
-    const platformOrder = ['google', 'facebook', 'instagram']
-    displayMetrics.forEach((m: any) => {
-      if (!m.campaign_name) return
-      const key = `${m.platform}::${m.campaign_name}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        result.push({ name: m.campaign_name as string, platform: m.platform as string })
-      }
-    })
-    result.sort((a, b) => {
-      const pd = platformOrder.indexOf(a.platform) - platformOrder.indexOf(b.platform)
-      return pd !== 0 ? pd : a.name.localeCompare(b.name)
-    })
-    return result
-  }, [displayMetrics, selectedDealerId])
 
   const callSummaryMonths = useMemo(() => {
     if (viewMode === 'monthly' && selectedMonth !== 'all') {
@@ -925,59 +919,127 @@ export default function DealersPage() {
           </div>
 
           {/* ── Ad Creatives (only when a dealer is selected) ── */}
-          {selectedDealerId && (
-            <div>
-              <div className="flex items-center justify-between border-l-4 border-pink-500 pl-3 mb-4">
-                <span className="text-sm font-semibold text-slate-800">Ad Creatives</span>
-                <span className="text-xs text-slate-400">Currently running campaigns</span>
-              </div>
-              {adCreatives.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 text-sm">
-                  No campaigns for selected period
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <div className="flex flex-row gap-4 pb-4" style={{ minWidth: 'max-content' }}>
-                    {adCreatives.map((c, i) => (
-                      <div
-                        key={i}
-                        className="w-48 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex-shrink-0"
-                      >
-                        <div className="h-32 bg-slate-100 flex flex-col items-center justify-center">
-                          <Camera size={32} className="text-slate-300" />
-                          <span className="text-xs text-slate-400 mt-1">Creative pending</span>
-                        </div>
-                        <div className="p-3">
-                          <p
-                            className="text-xs text-slate-600 font-medium leading-tight"
-                            style={{
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                            }}
-                          >
-                            {c.name}
-                          </p>
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded-full mt-1.5 inline-block ${
-                              c.platform === 'google'
-                                ? 'bg-blue-50 text-blue-700 border border-blue-100'
-                                : c.platform === 'facebook'
-                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                                : 'bg-pink-50 text-pink-700 border border-pink-100'
-                            }`}
-                          >
-                            {c.platform}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+{selectedDealerId && (
+  <div>
+    <div className="flex items-center justify-between border-l-4 border-pink-500 pl-3 mb-4">
+      <span className="text-sm font-semibold text-slate-800">Ad Creatives</span>
+      <span className="text-xs text-slate-400">All creatives for this dealer</span>
+    </div>
+
+    {creativesLoading ? (
+      <div className="text-center py-12 text-slate-400 text-sm">Loading creatives...</div>
+    ) : (creativesData.google.length === 0 && creativesData.facebook.length === 0 && creativesData.instagram.length === 0) ? (
+      <div className="text-center py-12 text-slate-400 text-sm">No creatives found for this dealer</div>
+    ) : (
+      <div className="flex flex-col gap-6">
+        {/* Google strip */}
+        {creativesData.google.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">Google</span>
+              <span className="text-xs text-slate-400">{creativesData.google.length} creatives</span>
             </div>
-          )}
+            <div className="overflow-x-auto">
+              <div className="flex flex-row gap-3 pb-2" style={{ minWidth: 'max-content' }}>
+                {creativesData.google.map((c, i) => (
+                  <div key={i} className="w-48 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex-shrink-0">
+                    <div className="h-32 bg-slate-50 overflow-hidden">
+                      <img
+                        src={c.storage_url}
+                        alt={c.headline || c.ad_name || 'Google creative'}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                      />
+                    </div>
+                    <div className="p-2.5">
+                      <p className="text-xs text-slate-600 font-medium leading-tight line-clamp-2">
+                        {c.headline || c.ad_name || c.campaign_name}
+                      </p>
+                      {c.description && (
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">{c.description}</p>
+                      )}
+                      <span className="text-xs px-1.5 py-0.5 rounded-full mt-1.5 inline-block bg-blue-50 text-blue-700 border border-blue-100">
+                        {c.creative_type || 'image'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Facebook strip */}
+        {creativesData.facebook.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">Facebook</span>
+              <span className="text-xs text-slate-400">{creativesData.facebook.length} creatives</span>
+            </div>
+            <div className="overflow-x-auto">
+              <div className="flex flex-row gap-3 pb-2" style={{ minWidth: 'max-content' }}>
+                {creativesData.facebook.map((c, i) => (
+                  <div key={i} className="w-48 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex-shrink-0">
+                    <div className="h-32 bg-slate-50 overflow-hidden">
+                      <img
+                        src={c.storage_url}
+                        alt={c.headline || c.ad_name || 'Facebook creative'}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                      />
+                    </div>
+                    <div className="p-2.5">
+                      <p className="text-xs text-slate-600 font-medium leading-tight line-clamp-2">
+                        {c.headline || c.ad_name || c.campaign_name}
+                      </p>
+                      {c.description && (
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">{c.description}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Instagram strip */}
+        {creativesData.instagram.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-semibold text-pink-700 bg-pink-50 border border-pink-100 px-2 py-0.5 rounded-full">Instagram</span>
+              <span className="text-xs text-slate-400">{creativesData.instagram.length} creatives</span>
+            </div>
+            <div className="overflow-x-auto">
+              <div className="flex flex-row gap-3 pb-2" style={{ minWidth: 'max-content' }}>
+                {creativesData.instagram.map((c, i) => (
+                  <div key={i} className="w-48 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex-shrink-0">
+                    <div className="h-32 bg-slate-50 overflow-hidden">
+                      <img
+                        src={c.storage_url}
+                        alt={c.headline || c.ad_name || 'Instagram creative'}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                      />
+                    </div>
+                    <div className="p-2.5">
+                      <p className="text-xs text-slate-600 font-medium leading-tight line-clamp-2">
+                        {c.headline || c.ad_name || c.campaign_name}
+                      </p>
+                      {c.description && (
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">{c.description}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+)}
         </div>
       )}
       </div>
