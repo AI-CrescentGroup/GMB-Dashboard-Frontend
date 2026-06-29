@@ -545,8 +545,7 @@ export default function DealersPage() {
   // ── JSX ──────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="w-full bg-slate-50 py-6 px-6 md:px-10">
-      <div className="w-full max-w-6xl mx-auto">
+    <div className="mx-auto max-w-[1440px] px-6 lg:px-8 py-6 lg:py-8">
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between pb-2 border-b border-slate-200 mb-6">
@@ -707,7 +706,9 @@ export default function DealersPage() {
               icon={<Phone size={16} className="text-emerald-500" />}
               label="Calls"
               value={callTotals.received > 0 ? formatNumber(callTotals.received) : '—'}
-              subtitle={callTotals.received > 0 ? `${formatNumber(callTotals.answered)} answered` : 'No call data'}
+              subtitle={callTotals.received > 0
+                ? `${Math.round((callTotals.answered / callTotals.received) * 100)}% answered`
+                : 'No call data'}
             />
           </div>
 
@@ -870,7 +871,7 @@ export default function DealersPage() {
                         <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[16%]">Answered</th>
                         <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[14%]">Missed</th>
                         <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[14%]">Dialled</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[24%]">Progress</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[24%]">Answered %</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1041,7 +1042,6 @@ export default function DealersPage() {
 )}
         </div>
       )}
-      </div>
     </div>
   )
 }
