@@ -861,7 +861,6 @@ export default function DealersPage() {
               {/* Call Summary */}
               <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4">
                 <h3 className="text-sm font-semibold text-slate-800">Call Summary</h3>
-                <p className="text-xs text-slate-400 mb-3">Dashlog call data (coming soon)</p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm table-fixed">
                     <thead>

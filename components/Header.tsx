@@ -6,15 +6,16 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { LogOut, BarChart3, Users } from 'lucide-react'
 
-const navItems = [
+const allNavItems = [
   { href: '/dashboard', label: 'Overview', icon: BarChart3 },
   { href: '/dashboard/dealers', label: 'Dealers', icon: Users },
 ]
 
-export default function Header() {
+export default function Header({ role }: { role?: string }) {
   const [user, setUser] = useState<any>(null)
   const router = useRouter()
   const pathname = usePathname()
+  const navItems = role === 'branch_head' ? allNavItems.filter(item => item.href !== '/dashboard') : allNavItems
 
   useEffect(() => {
     async function loadUser() {
