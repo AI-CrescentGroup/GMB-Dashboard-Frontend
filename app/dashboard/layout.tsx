@@ -18,7 +18,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     } else {
       setIsAuthenticated(true)
       setRole(user?.role || '')
-      if (user?.role === 'branch_head' && pathname === '/dashboard') {
+      if ((user?.role === 'branch_head' || user?.role === 'dealer') && pathname === '/dashboard') {
         router.push('/dashboard/dealers')
       }
     }

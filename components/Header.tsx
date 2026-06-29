@@ -15,7 +15,7 @@ export default function Header({ role }: { role?: string }) {
   const [user, setUser] = useState<any>(null)
   const router = useRouter()
   const pathname = usePathname()
-  const navItems = role === 'branch_head' ? allNavItems.filter(item => item.href !== '/dashboard') : allNavItems
+  const navItems = (role === 'branch_head' || role === 'dealer') ? allNavItems.filter(item => item.href !== '/dashboard') : allNavItems
 
   useEffect(() => {
     async function loadUser() {

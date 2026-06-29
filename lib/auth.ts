@@ -4,7 +4,7 @@ export async function loginUser(username: string, password: string) {
   // Step 1: Lookup user by username to get email
   const { data: userData, error: userError } = await supabase
     .from('users')
-    .select('email, role, client_id')
+    .select('email, role, client_id, dealer_id')
     .eq('username', username)
     .single()
 
@@ -30,6 +30,7 @@ export async function loginUser(username: string, password: string) {
       username: username,
       role: userData.role,
       client_id: userData.client_id,
+      dealer_id: userData.dealer_id,
     })
   )
 

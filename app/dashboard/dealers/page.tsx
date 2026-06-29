@@ -281,6 +281,7 @@ function CampaignTable({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DealersPage() {
+  const [role, setRole] = useState('')
   const [dealers, setDealers] = useState<any[]>([])
   const [selectedDealerId, setSelectedDealerId] = useState('')
   const [displayMetrics, setDisplayMetrics] = useState<any[]>([])
@@ -294,6 +295,17 @@ export default function DealersPage() {
   const [budgets, setBudgets] = useState<any[]>([])
   const [creativesData, setCreativesData] = useState<{ google: any[]; facebook: any[]; instagram: any[] }>({ google: [], facebook: [], instagram: [] })
   const [creativesLoading, setCreativesLoading] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+
+  // Read role + auto-select dealer from localStorage
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const userRole = user?.role || ''
+    setRole(userRole)
+    if (userRole === 'dealer' && user?.dealer_id) {
+      setSelectedDealerId(user.dealer_id)
+    }
+  }, [])
 
   // Load dealers + latest date on mount
   useEffect(() => {
@@ -556,22 +568,24 @@ export default function DealersPage() {
       {/* ── Filter Bar ── */}
       <div className="flex flex-wrap items-end gap-3 mb-6 bg-white rounded-xl border border-slate-200 shadow px-5 py-4">
 
-        {/* Dealer select */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-            Select Dealer
-          </label>
-          <Select
-            value={selectedDealerId}
-            onChange={(e) => setSelectedDealerId(e.target.value)}
-            className="min-w-[280px] h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none"
-          >
-            <option value="">-- All Dealers (Aggregated) --</option>
-            {dealers.map((d: any) => (
-              <option key={d.id} value={d.id}>{d.dealer_name}</option>
-            ))}
-          </Select>
-        </div>
+        {/* Dealer select — hidden for dealer role (auto-selected from auth) */}
+        {role !== 'dealer' && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              Select Dealer
+            </label>
+            <Select
+              value={selectedDealerId}
+              onChange={(e) => setSelectedDealerId(e.target.value)}
+              className="min-w-[280px] h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none"
+            >
+              <option value="">-- All Dealers (Aggregated) --</option>
+              {dealers.map((d: any) => (
+                <option key={d.id} value={d.id}>{d.dealer_name}</option>
+              ))}
+            </Select>
+          </div>
+        )}
 
         {/* Month or date inputs */}
         {viewMode === 'monthly' ? (
@@ -946,8 +960,9 @@ export default function DealersPage() {
                     <div className="h-32 bg-slate-50 overflow-hidden">
                       <img
                         src={c.storage_url}
-                        alt={c.headline || c.ad_name || 'Google creative'}
-                        className="w-full h-full object-cover"
+                        alt={c.headline || c.ad_name || 'creative'}
+                        className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => setLightboxUrl(c.storage_url)}
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                       />
                     </div>
@@ -983,8 +998,9 @@ export default function DealersPage() {
                     <div className="h-32 bg-slate-50 overflow-hidden">
                       <img
                         src={c.storage_url}
-                        alt={c.headline || c.ad_name || 'Facebook creative'}
-                        className="w-full h-full object-cover"
+                        alt={c.headline || c.ad_name || 'creative'}
+                        className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => setLightboxUrl(c.storage_url)}
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                       />
                     </div>
@@ -1017,8 +1033,9 @@ export default function DealersPage() {
                     <div className="h-32 bg-slate-50 overflow-hidden">
                       <img
                         src={c.storage_url}
-                        alt={c.headline || c.ad_name || 'Instagram creative'}
-                        className="w-full h-full object-cover"
+                        alt={c.headline || c.ad_name || 'creative'}
+                        className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => setLightboxUrl(c.storage_url)}
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                       />
                     </div>
@@ -1040,6 +1057,27 @@ export default function DealersPage() {
     )}
   </div>
 )}
+        </div>
+      )}
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setLightboxUrl(null)}
+              className="absolute -top-10 right-0 text-white text-sm hover:text-slate-300"
+            >
+              ✕ Close
+            </button>
+            <img
+              src={lightboxUrl}
+              alt="Creative preview"
+              className="w-full h-full object-contain rounded-lg max-h-[85vh]"
+            />
+          </div>
         </div>
       )}
     </div>
