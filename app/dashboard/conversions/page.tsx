@@ -57,7 +57,9 @@ export default function ConversionsPage() {
     loadData()
   }, [filters])
 
-  const totalDirections = metrics.reduce((sum, m) => sum + (m.driving_directions || 0), 0)
+  const totalDirections = metrics
+    .filter(m => m.platform === 'gmb')
+    .reduce((sum, m) => sum + (m.driving_directions || 0), 0)
   const totalWebsiteVisits = metrics.reduce((sum, m) => sum + (m.website_visits || 0), 0)
   const totalEvents = metrics.reduce((sum, m) => sum + (m.event_count || 0), 0)
 

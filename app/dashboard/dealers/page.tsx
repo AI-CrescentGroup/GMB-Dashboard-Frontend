@@ -416,7 +416,7 @@ export default function DealersPage() {
     let directions = 0, storeVisits = 0, websiteVisits = 0, callNumberTrack = 0, callTrack = 0,
       downloadCatalogue = 0, driveDirection = 0, enquiryTrack = 0, formSubmit = 0
     displayMetrics.forEach((m: any) => {
-      if (m.platform === 'google') {
+      if (m.platform === 'gmb') {
         directions += m.driving_directions || 0
         storeVisits += m.store_visits || 0
       }
@@ -498,6 +498,7 @@ export default function DealersPage() {
       arr.length > 0 ? (arr.reduce((s: number, r: any) => s + parseFloat(r[key] || 0), 0) / arr.length).toFixed(2) : '0.00'
 
     const gRows = displayMetrics.filter((r: any) => r.platform === 'google')
+    const gmbRows = displayMetrics.filter((r: any) => r.platform === 'gmb')
     const fbRows = displayMetrics.filter((r: any) => r.platform === 'facebook')
     const igRows = displayMetrics.filter((r: any) => r.platform === 'instagram')
     const ga4Rows = displayMetrics.filter((r: any) => r.platform === 'ga4')
@@ -532,7 +533,7 @@ export default function DealersPage() {
         cpm: '₹' + (igImpressions > 0 ? ((igSpend / igImpressions) * 1000).toFixed(2) : '0.00'),
       },
       conversions: {
-        directions: formatNumber(sum(gRows, 'driving_directions')),
+        directions: formatNumber(sum(gmbRows, 'driving_directions')),
         visits: formatNumber(sum(ga4Rows, 'website_visits')),
         events: formatNumber(sum(ga4Rows, 'event_count')),
       },

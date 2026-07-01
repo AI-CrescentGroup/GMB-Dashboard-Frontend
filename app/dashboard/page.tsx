@@ -219,12 +219,14 @@ export default function OverviewPage() {
 
     metrics.forEach((m: any) => {
       if (m.platform === 'google') {
-        directions += m.driving_directions || 0
-        storeVisits += m.store_visits || 0
         googleSpend += m.spend_inr || 0
         googleClicks += m.link_clicks || 0
         totalClicks += m.link_clicks || 0
         totalImpressions += m.impressions || 0
+      }
+      if (m.platform === 'gmb') {
+        directions += m.driving_directions || 0
+        storeVisits += m.store_visits || 0
       }
       if (m.platform === 'ga4') websiteVisits += m.website_visits || 0
       if (m.platform === 'facebook' || m.platform === 'instagram') {
