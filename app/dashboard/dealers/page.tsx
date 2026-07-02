@@ -43,17 +43,33 @@ const CALL_MONTHS = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatNumber(val: number): string {
-  if (val >= 10_000_000) return `${(val / 10_000_000).toFixed(1)}Cr`
-  if (val >= 100_000) return `${(val / 100_000).toFixed(1)}L`
-  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}K`
+  if (val >= 10_000_000) return `${(val / 10_000_000).toFixed(2)}Cr`
+  if (val >= 100_000) return `${(val / 100_000).toFixed(2)}L`
+  if (val >= 1_000) return `${(val / 1_000).toFixed(2)}K`
   return val.toLocaleString('en-IN')
 }
 
 function formatCurrency(val: number): string {
-  if (val >= 10_000_000) return `₹${(val / 10_000_000).toFixed(1)}Cr`
-  if (val >= 100_000) return `₹${(val / 100_000).toFixed(1)}L`
-  if (val >= 1_000) return `₹${(val / 1_000).toFixed(1)}K`
+  if (val >= 10_000_000) return `₹${(val / 10_000_000).toFixed(2)}Cr`
+  if (val >= 100_000) return `₹${(val / 100_000).toFixed(2)}L`
+  if (val >= 1_000) return `₹${(val / 1_000).toFixed(2)}K`
   return `₹${val.toLocaleString('en-IN')}`
+}
+
+function formatMillions(val: number): string {
+  return `${(val / 1_000_000).toFixed(2)}Mn`
+}
+
+function formatPeriod(startDate: string | null, endDate: string | null): string {
+  if (!startDate || !endDate) return '—'
+  const fmt = (d: string) => {
+    const dt = new Date(d)
+    const day = dt.getDate()
+    const month = dt.toLocaleString('en-US', { month: 'short' })
+    const year = String(dt.getFullYear()).slice(-2)
+    return `${day} ${month}'${year}`
+  }
+  return `${fmt(startDate)}–${fmt(endDate)}`
 }
 
 function computeDateRange(
@@ -70,19 +86,32 @@ function computeDateRange(
 }
 
 function groupCampaigns(rows: any[]) {
-  const map: Record<string, { name: string; impressions: number; clicks: number; spend: number }> = {}
+  const map: Record<string, {
+    name: string; impressions: number; clicks: number; spend: number;
+    startDate: string | null; endDate: string | null
+  }> = {}
   rows.forEach((row) => {
     const name = (row.campaign_name as string | null) || '(No Campaign)'
-    if (!map[name]) map[name] = { name, impressions: 0, clicks: 0, spend: 0 }
+    if (!map[name]) map[name] = { name, impressions: 0, clicks: 0, spend: 0, startDate: null, endDate: null }
     map[name].impressions += (row.impressions as number) || 0
     map[name].clicks += (row.link_clicks as number) || 0
     map[name].spend += (row.spend_inr as number) || 0
+    const rowStart = row.start_date as string | null
+    const rowEnd = row.end_date as string | null
+    if (rowStart && (!map[name].startDate || rowStart < map[name].startDate!)) {
+      map[name].startDate = rowStart
+    }
+    if (rowEnd && (!map[name].endDate || rowEnd > map[name].endDate!)) {
+      map[name].endDate = rowEnd
+    }
   })
   return Object.values(map).map((c) => ({
     name: c.name,
     impressions: c.impressions,
     clicks: c.clicks,
     spend: c.spend,
+    startDate: c.startDate,
+    endDate: c.endDate,
     ctr: c.impressions > 0 ? ((c.clicks / c.impressions) * 100).toFixed(2) : '0.00',
     cpc: c.clicks > 0 ? (c.spend / c.clicks).toFixed(2) : '0.00',
     cpm: c.impressions > 0 ? ((c.spend / c.impressions) * 1000).toFixed(2) : '0.00',
@@ -191,38 +220,40 @@ function CampaignTable({
     <table className="w-full table-fixed text-sm">
       <thead>
         <tr className="bg-slate-50">
-          <th className={`${TH} text-left w-[28%]`}>Campaign Name</th>
+          <th className={`${TH} text-center w-[28%]`}>Campaign Name</th>
           <th className={`${TH} text-center w-[7%]`}>Status</th>
           <th className={`${TH} text-center w-[10%]`}>Period</th>
-          <th className={`${TH} text-right w-[7%]`}>Budget</th>
-          <th className={`${TH} text-right w-[7%]`}>
+          <th className={`${TH} text-center w-[7%]`}>Budget</th>
+          <th className={`${TH} text-center w-[8%]`}>Link Clicks</th>
+          <th className={`${TH} text-center w-[9%]`}>Impressions</th>
+          <th className={`${TH} text-center w-[7%]`}>
             {showReachLabel !== false ? 'Reach' : ''}
           </th>
-          <th className={`${TH} text-right w-[9%]`}>Impressions</th>
-          <th className={`${TH} text-right w-[7%]`}>CTR %</th>
-          <th className={`${TH} text-right w-[8%]`}>{showCpm ? 'CPM ₹' : 'CPC ₹'}</th>
-          <th className={`${TH} text-right w-[8%]`}>Link Clicks</th>
-          <th className={`${TH} text-right w-[9%]`}>Spend ₹</th>
+          <th className={`${TH} text-center w-[7%]`}>CTR %</th>
+          <th className={`${TH} text-center w-[8%]`}>{showCpm ? 'CPM ₹' : 'CPC ₹'}</th>
+          <th className={`${TH} text-center w-[9%]`}>Spend ₹</th>
         </tr>
       </thead>
       <tbody>
         {isAllDealers ? (
           // All Dealers mode: single aggregated summary row
           <tr className="hover:bg-slate-50 transition-colors">
-            <td className={`${TD} text-left w-[28%]`}>
+            <td className={`${TD} text-center w-[28%]`}>
               <span className="text-slate-500 italic">{campaignCount} campaigns</span>
             </td>
             <td className={`${TD} text-center w-[7%]`}><span className="text-slate-400">—</span></td>
             <td className={`${TD} text-center w-[10%]`}><span className="text-slate-400">—</span></td>
-            <td className={`${TD} text-right w-[7%]`}>
+            <td className={`${TD} text-center w-[7%]`}>
               {budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
             </td>
+            <td className={`${TD} text-center w-[8%]`}>{formatMillions(totalClicks)}</td>
+            <td className={`${TD} text-center w-[9%]`}>{formatMillions(totalImpressions)}</td>
             <td
-              className={`${TD} text-right w-[7%]`}
+              className={`${TD} text-center w-[7%]`}
               title={showReachLabel !== false && !reachValue ? "Live Meta API — coming soon" : undefined}
             >
               {showReachLabel === false ? (
-                <span className="text-slate-200">—</span>
+                ''
               ) : reachValue && reachValue > 0 ? (
                 <span className="text-slate-700 font-medium">
                   {formatNumber(reachValue)}
@@ -231,32 +262,38 @@ function CampaignTable({
                 <span className="text-slate-400">—*</span>
               )}
             </td>
-            <td className={`${TD} text-right w-[9%]`}>{formatNumber(totalImpressions)}</td>
-            <td className={`${TD} text-right w-[7%]`}>{summaryCtr}%</td>
-            <td className={`${TD} text-right w-[8%]`}>₹{showCpm ? summaryCpm : summaryCpc}</td>
-            <td className={`${TD} text-right w-[8%]`}>{formatNumber(totalClicks)}</td>
-            <td className={`${TD} text-right w-[9%]`}>{formatCurrency(totalSpend)}</td>
+            <td className={`${TD} text-center w-[7%]`}>{summaryCtr}%</td>
+            <td className={`${TD} text-center w-[8%]`}>₹{showCpm ? summaryCpm : summaryCpc}</td>
+            <td className={`${TD} text-center w-[9%]`}>{formatCurrency(totalSpend)}</td>
           </tr>
         ) : (
           // Single dealer mode: one row per campaign
           campaigns.map((c, i) => (
             <tr key={i} className="hover:bg-slate-50 transition-colors">
-              <td className={`${TD} text-left font-medium text-slate-900 w-[28%] truncate max-w-0`}>
+              <td className={`${TD} text-center font-medium text-slate-900 w-[28%] truncate max-w-0`}>
                 <span className="block truncate" title={c.name}>{c.name}</span>
               </td>
               <td className={`${TD} text-center w-[7%]`}>
                 <StatusBadge status={dealerStatus} />
               </td>
-              <td className={`${TD} text-center w-[10%]`}><span className="text-slate-400">—</span></td>
-              <td className={`${TD} text-right w-[7%]`}>
+              <td className={`${TD} text-center w-[10%]`}>
+                {c.startDate && c.endDate ? (
+                  <span className="text-slate-700 text-xs">{formatPeriod(c.startDate, c.endDate)}</span>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
+              </td>
+              <td className={`${TD} text-center w-[7%]`}>
                 {budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
               </td>
+              <td className={`${TD} text-center w-[8%]`}>{formatNumber(c.clicks)}</td>
+              <td className={`${TD} text-center w-[9%]`}>{formatMillions(c.impressions)}</td>
               <td
-                className={`${TD} text-right w-[7%]`}
+                className={`${TD} text-center w-[7%]`}
                 title={showReachLabel !== false && !reachValue ? "Live Meta API — coming soon" : undefined}
               >
                 {showReachLabel === false ? (
-                  <span className="text-slate-200">—</span>
+                  ''
                 ) : reachValue && reachValue > 0 ? (
                   <span className="text-slate-700 font-medium">
                     {formatNumber(reachValue)}
@@ -265,11 +302,9 @@ function CampaignTable({
                   <span className="text-slate-400">—*</span>
                 )}
               </td>
-              <td className={`${TD} text-right w-[9%]`}>{formatNumber(c.impressions)}</td>
-              <td className={`${TD} text-right w-[7%]`}>{c.ctr}%</td>
-              <td className={`${TD} text-right w-[8%]`}>₹{showCpm ? c.cpm : c.cpc}</td>
-              <td className={`${TD} text-right w-[8%]`}>{formatNumber(c.clicks)}</td>
-              <td className={`${TD} text-right w-[9%]`}>{formatCurrency(c.spend)}</td>
+              <td className={`${TD} text-center w-[7%]`}>{c.ctr}%</td>
+              <td className={`${TD} text-center w-[8%]`}>₹{showCpm ? c.cpm : c.cpc}</td>
+              <td className={`${TD} text-center w-[9%]`}>{formatCurrency(c.spend)}</td>
             </tr>
           ))
         )}
@@ -782,7 +817,7 @@ export default function DealersPage() {
             <KpiCard
               icon={<Eye size={16} className="text-blue-500" />}
               label="Impressions"
-              value={formatNumber(kpi.totalImpressions)}
+              value={formatMillions(kpi.totalImpressions)}
             />
             <KpiCard
               icon={<Activity size={16} className="text-slate-300" />}
@@ -793,7 +828,7 @@ export default function DealersPage() {
             <KpiCard
               icon={<Zap size={16} className="text-amber-500" />}
               label="Link Clicks"
-              value={formatNumber(kpi.totalClicks)}
+              value={selectedDealerId ? formatNumber(kpi.totalClicks) : formatMillions(kpi.totalClicks)}
             />
             <KpiCard
               icon={<Activity size={16} className="text-emerald-500" />}
@@ -805,7 +840,7 @@ export default function DealersPage() {
               label="Calls"
               value={callTotals.received > 0 ? formatNumber(callTotals.received) : '—'}
               subtitle={callTotals.received > 0
-                ? `${Math.round((callTotals.answered / callTotals.received) * 100)}% answered`
+                ? `${Math.round((callTotals.answered / callTotals.received) * 100)}% answered (${formatNumber(callTotals.answered)})`
                 : 'No call data'}
             />
           </div>
