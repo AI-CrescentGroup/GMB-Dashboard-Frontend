@@ -6,7 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import { getDealers, getMetrics, getCallMetrics, getBudgets } from '@/lib/queries'
-import { TrendingUp, MapPin, Activity, Phone, Navigation, Eye, Zap } from 'lucide-react'
+import { TrendingUp, MapPin, Activity, Phone, Navigation, Eye, Zap, MousePointerClick } from 'lucide-react'
 
 const DATE_FROM = '2025-05-28'
 const DATE_TO = '2026-03-31'
@@ -100,6 +100,11 @@ function fmtKpiValue(val: number, kpi: string): string {
   return kpi === 'spend_inr' ? formatCurrency(val) : formatNumber(val)
 }
 
+// Admin-only page: Impressions/Clicks use Mn notation, not the Cr/L/K scale above.
+function formatMillions(val: number): string {
+  return `${(val / 1_000_000).toFixed(1)}Mn`
+}
+
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -121,12 +126,12 @@ function KpiCard({
   subtitle?: string
 }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-      <div className="flex items-center gap-2 mb-2">
+    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+      <div className="flex items-center gap-2 mb-1.5">
         {icon}
-        <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">{label}</span>
+        <span className="text-[11px] text-slate-500 uppercase tracking-wide font-medium">{label}</span>
       </div>
-      <div className={`text-2xl font-bold ${note ? 'text-slate-400' : 'text-slate-900'}`}>
+      <div className={`text-xl font-bold ${note ? 'text-slate-400' : 'text-slate-900'}`}>
         {prefix}{value}{suffix}
       </div>
       {subtitle && <div className="text-xs text-slate-400 mt-1">{subtitle}</div>}
@@ -242,7 +247,7 @@ export default function OverviewPage() {
     const overallCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0
     const totalSpend = googleSpend + metaSpend
 
-    return { directions, storeVisits, websiteVisits, avgCpc, avgCpm, overallCtr, totalSpend }
+    return { directions, storeVisits, websiteVisits, avgCpc, avgCpm, overallCtr, totalSpend, totalImpressions, totalClicks }
   }, [metrics])
 
   // ── Dealer lookup map ─────────────────────────────────────────────────────────
@@ -435,12 +440,12 @@ export default function OverviewPage() {
         <p className="text-sm text-slate-500 mt-1">Aggregate performance across all dealers</p>
       </div>
 
-      {/* ── KPI Strip (8 cards, 4 per row) ── */}
+      {/* ── KPI Strip (11 cards, 4 per row) ── */}
       {loading ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="bg-slate-100 animate-pulse rounded-xl h-24" />
+            {Array.from({ length: 11 }).map((_, i) => (
+              <div key={i} className="bg-slate-100 animate-pulse rounded-xl h-20" />
             ))}
           </div>
         </div>
@@ -448,44 +453,20 @@ export default function OverviewPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {/* Row 1 */}
           <KpiCard
-            icon={<Phone size={16} className="text-emerald-500" />}
-            label="Calls"
-            value={formatNumber(overviewCalls.reduce((s: number, r: any) => s + (r.calls_received || 0), 0))}
+            icon={<Eye size={16} className="text-blue-500" />}
+            label="Impressions"
+            value={formatMillions(kpi.totalImpressions)}
           />
           <KpiCard
-            icon={<MapPin size={16} className="text-emerald-500" />}
-            label="Store Visits"
-            value={formatNumber(kpi.storeVisits)}
-            subtitle="From Google Ads"
+            icon={<MousePointerClick size={16} className="text-amber-500" />}
+            label="Clicks"
+            value={formatMillions(kpi.totalClicks)}
           />
           <KpiCard
-            icon={<Navigation size={16} className="text-emerald-500" />}
-            label="Driving Directions"
-            value={formatNumber(kpi.directions)}
-            subtitle="From Google Ads"
-          />
-          <KpiCard
-            icon={<Activity size={16} className="text-blue-500" />}
-            label="Website Visits"
-            value={formatNumber(kpi.websiteVisits)}
-          />
-
-          {/* Row 2 */}
-          <KpiCard
-            icon={<TrendingUp size={16} className="text-indigo-500" />}
-            label="Avg CPC (Google)"
-            value={formatCurrency(kpi.avgCpc)}
-          />
-          <KpiCard
-            icon={<Eye size={16} className="text-purple-500" />}
-            label="Avg CPM (Meta)"
-            value={formatCurrency(kpi.avgCpm)}
-          />
-          <KpiCard
-            icon={<Zap size={16} className="text-amber-500" />}
-            label="Overall CTR"
-            value={kpi.overallCtr.toFixed(2)}
-            suffix="%"
+            icon={<Activity size={16} className="text-slate-300" />}
+            label="Reach"
+            value="—"
+            note="Meta API (coming soon)"
           />
           <KpiCard
             icon={<TrendingUp size={16} className="text-indigo-500" />}
@@ -506,6 +487,48 @@ export default function OverviewPage() {
               const pct = ((kpi.totalSpend / totalBudget) * 100).toFixed(1)
               return `${pct}% of planned budget`
             })()}
+          />
+
+          {/* Row 2 */}
+          <KpiCard
+            icon={<TrendingUp size={16} className="text-indigo-500" />}
+            label="Avg CPC (Google)"
+            value={`₹${kpi.avgCpc.toFixed(2)}`}
+          />
+          <KpiCard
+            icon={<Eye size={16} className="text-purple-500" />}
+            label="Avg CPM (Meta)"
+            value={`₹${kpi.avgCpm.toFixed(2)}`}
+          />
+          <KpiCard
+            icon={<Zap size={16} className="text-amber-500" />}
+            label="Overall CTR"
+            value={kpi.overallCtr.toFixed(2)}
+            suffix="%"
+          />
+          <KpiCard
+            icon={<Phone size={16} className="text-emerald-500" />}
+            label="Calls"
+            value={formatNumber(overviewCalls.reduce((s: number, r: any) => s + (r.calls_received || 0), 0))}
+          />
+
+          {/* Row 3 */}
+          <KpiCard
+            icon={<MapPin size={16} className="text-emerald-500" />}
+            label="Store Visits"
+            value={formatNumber(kpi.storeVisits)}
+            subtitle="From Google Ads"
+          />
+          <KpiCard
+            icon={<Navigation size={16} className="text-emerald-500" />}
+            label="Driving Directions"
+            value={formatNumber(kpi.directions)}
+            subtitle="From Google Ads"
+          />
+          <KpiCard
+            icon={<Activity size={16} className="text-blue-500" />}
+            label="Website Visits"
+            value={formatNumber(kpi.websiteVisits)}
           />
         </div>
       )}
@@ -721,24 +744,24 @@ export default function OverviewPage() {
               >
                 <colgroup>
                   <col style={{ width: '48px' }} />
-                  <col />
-                  <col style={{ width: '110px' }} />
-                  <col style={{ width: '80px' }} />
-                  <col style={{ width: '88px' }} />
-                  <col style={{ width: '100px' }} />
-                  <col style={{ width: '88px' }} />
-                  <col style={{ width: '140px' }} />
+                  <col style={{ width: '242px' }} />
+                  <col style={{ width: '107px' }} />
+                  <col style={{ width: '78px' }} />
+                  <col style={{ width: '111px' }} />
+                  <col style={{ width: '126px' }} />
+                  <col style={{ width: '111px' }} />
+                  <col style={{ width: '165px' }} />
                 </colgroup>
                 <thead>
                   <tr className="bg-slate-50">
-                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-left">#</th>
-                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-left">Store Name</th>
-                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-left">Zone</th>
-                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-right">Tier</th>
-                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-right">Calls</th>
-                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-right">Answered</th>
-                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-right">Missed</th>
-                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-left">Progress</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">#</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">Store Name</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">Zone</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">Tier</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">Calls</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">Answered</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">Missed</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">Answered %</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -755,15 +778,15 @@ export default function OverviewPage() {
                         : 0
                       return (
                         <tr key={d.dealer_id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-4 py-3 text-slate-400 text-xs font-mono border-b border-slate-50">{i + 1}</td>
-                          <td className="px-4 py-3 font-medium text-slate-900 text-sm border-b border-slate-50 truncate">{d.dealer_name}</td>
-                          <td className="px-4 py-3 text-slate-500 text-sm border-b border-slate-50">{d.zone}</td>
-                          <td className="px-4 py-3 text-slate-500 text-sm text-right border-b border-slate-50">{d.tier}</td>
-                          <td className="px-4 py-3 text-slate-700 text-sm text-right border-b border-slate-50">{formatNumber(d.calls_received)}</td>
-                          <td className="px-4 py-3 text-slate-700 text-sm text-right border-b border-slate-50">{formatNumber(d.calls_answered)}</td>
-                          <td className="px-4 py-3 text-slate-700 text-sm text-right border-b border-slate-50">{formatNumber(d.calls_missed)}</td>
-                          <td className="px-4 py-3 border-b border-slate-50">
-                            <div className="flex items-center gap-2 min-w-[120px]">
+                          <td className="px-4 py-3 text-slate-400 text-xs font-mono border-b border-slate-50 text-center">{i + 1}</td>
+                          <td className="px-4 py-3 font-medium text-slate-900 text-sm border-b border-slate-50 truncate text-center">{d.dealer_name}</td>
+                          <td className="px-4 py-3 text-slate-500 text-sm border-b border-slate-50 text-center">{d.zone}</td>
+                          <td className="px-4 py-3 text-slate-500 text-sm border-b border-slate-50 text-center">{d.tier}</td>
+                          <td className="px-4 py-3 text-slate-700 text-sm border-b border-slate-50 text-center">{formatNumber(d.calls_received)}</td>
+                          <td className="px-4 py-3 text-slate-700 text-sm border-b border-slate-50 text-center">{formatNumber(d.calls_answered)}</td>
+                          <td className="px-4 py-3 text-slate-700 text-sm border-b border-slate-50 text-center">{formatNumber(d.calls_missed)}</td>
+                          <td className="px-4 py-3 border-b border-slate-50 text-center">
+                            <div className="flex items-center gap-2 min-w-[120px] mx-auto">
                               <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-indigo-500 rounded-full transition-all"

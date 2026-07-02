@@ -278,6 +278,85 @@ function CampaignTable({
   )
 }
 
+// ─── Creative carousel component ──────────────────────────────────────────────
+
+function CreativeCarousel({
+  platform,
+  label,
+  badgeClass,
+  creatives,
+  index,
+  onIndexChange,
+  onImageClick,
+  showTypeTag,
+}: {
+  platform: string
+  label: string
+  badgeClass: string
+  creatives: any[]
+  index: number
+  onIndexChange: (newIndex: number) => void
+  onImageClick: (url: string) => void
+  showTypeTag: boolean
+}) {
+  if (creatives.length === 0) return null
+
+  const current = creatives[index]
+  const canPrev = index > 0
+  const canNext = index < creatives.length - 1
+
+  return (
+    <div className="flex-1 min-w-0">
+      <div className="flex items-center gap-2 mb-3">
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badgeClass}`}>{label}</span>
+        <span className="text-xs text-slate-400">{index + 1} of {creatives.length}</span>
+      </div>
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="relative h-56 bg-slate-50">
+          <img
+            src={current.storage_url}
+            alt={current.headline || current.ad_name || 'creative'}
+            className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+            onClick={() => onImageClick(current.storage_url)}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
+          {canPrev && (
+            <button
+              onClick={() => onIndexChange(index - 1)}
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-slate-700 hover:bg-white transition-colors"
+              aria-label="Previous creative"
+            >
+              ‹
+            </button>
+          )}
+          {canNext && (
+            <button
+              onClick={() => onIndexChange(index + 1)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-slate-700 hover:bg-white transition-colors"
+              aria-label="Next creative"
+            >
+              ›
+            </button>
+          )}
+        </div>
+        <div className="p-3">
+          <p className="text-xs text-slate-600 font-medium leading-tight line-clamp-2">
+            {current.headline || current.ad_name || current.campaign_name}
+          </p>
+          {current.description && (
+            <p className="text-xs text-slate-400 mt-1 line-clamp-1">{current.description}</p>
+          )}
+          {showTypeTag && (
+            <span className="text-xs px-1.5 py-0.5 rounded-full mt-1.5 inline-block bg-blue-50 text-blue-700 border border-blue-100">
+              {current.creative_type || 'image'}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DealersPage() {
@@ -296,6 +375,7 @@ export default function DealersPage() {
   const [creativesData, setCreativesData] = useState<{ google: any[]; facebook: any[]; instagram: any[] }>({ google: [], facebook: [], instagram: [] })
   const [creativesLoading, setCreativesLoading] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [carouselIndex, setCarouselIndex] = useState<{ google: number; facebook: number; instagram: number }>({ google: 0, facebook: 0, instagram: 0 })
 
   // Read role + auto-select dealer from localStorage
   useEffect(() => {
@@ -358,7 +438,10 @@ export default function DealersPage() {
     }
     setCreativesLoading(true)
     getAdCreatives(selectedDealerId)
-      .then(data => setCreativesData(data))
+      .then(data => {
+        setCreativesData(data)
+        setCarouselIndex({ google: 0, facebook: 0, instagram: 0 })
+      })
       .catch(err => console.error('creatives fetch error:', err))
       .finally(() => setCreativesLoading(false))
   }, [selectedDealerId])
@@ -946,114 +1029,37 @@ export default function DealersPage() {
     ) : (creativesData.google.length === 0 && creativesData.facebook.length === 0 && creativesData.instagram.length === 0) ? (
       <div className="text-center py-12 text-slate-400 text-sm">No creatives found for this dealer</div>
     ) : (
-      <div className="flex flex-col gap-6">
-        {/* Google strip */}
-        {creativesData.google.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">Google</span>
-              <span className="text-xs text-slate-400">{creativesData.google.length} creatives</span>
-            </div>
-            <div className="overflow-x-auto">
-              <div className="flex flex-row gap-3 pb-2" style={{ minWidth: 'max-content' }}>
-                {creativesData.google.map((c, i) => (
-                  <div key={i} className="w-48 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex-shrink-0">
-                    <div className="h-32 bg-slate-50 overflow-hidden">
-                      <img
-                        src={c.storage_url}
-                        alt={c.headline || c.ad_name || 'creative'}
-                        className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => setLightboxUrl(c.storage_url)}
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                      />
-                    </div>
-                    <div className="p-2.5">
-                      <p className="text-xs text-slate-600 font-medium leading-tight line-clamp-2">
-                        {c.headline || c.ad_name || c.campaign_name}
-                      </p>
-                      {c.description && (
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">{c.description}</p>
-                      )}
-                      <span className="text-xs px-1.5 py-0.5 rounded-full mt-1.5 inline-block bg-blue-50 text-blue-700 border border-blue-100">
-                        {c.creative_type || 'image'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Facebook strip */}
-        {creativesData.facebook.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">Facebook</span>
-              <span className="text-xs text-slate-400">{creativesData.facebook.length} creatives</span>
-            </div>
-            <div className="overflow-x-auto">
-              <div className="flex flex-row gap-3 pb-2" style={{ minWidth: 'max-content' }}>
-                {creativesData.facebook.map((c, i) => (
-                  <div key={i} className="w-48 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex-shrink-0">
-                    <div className="h-32 bg-slate-50 overflow-hidden">
-                      <img
-                        src={c.storage_url}
-                        alt={c.headline || c.ad_name || 'creative'}
-                        className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => setLightboxUrl(c.storage_url)}
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                      />
-                    </div>
-                    <div className="p-2.5">
-                      <p className="text-xs text-slate-600 font-medium leading-tight line-clamp-2">
-                        {c.headline || c.ad_name || c.campaign_name}
-                      </p>
-                      {c.description && (
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">{c.description}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Instagram strip */}
-        {creativesData.instagram.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-semibold text-pink-700 bg-pink-50 border border-pink-100 px-2 py-0.5 rounded-full">Instagram</span>
-              <span className="text-xs text-slate-400">{creativesData.instagram.length} creatives</span>
-            </div>
-            <div className="overflow-x-auto">
-              <div className="flex flex-row gap-3 pb-2" style={{ minWidth: 'max-content' }}>
-                {creativesData.instagram.map((c, i) => (
-                  <div key={i} className="w-48 bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden flex-shrink-0">
-                    <div className="h-32 bg-slate-50 overflow-hidden">
-                      <img
-                        src={c.storage_url}
-                        alt={c.headline || c.ad_name || 'creative'}
-                        className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => setLightboxUrl(c.storage_url)}
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                      />
-                    </div>
-                    <div className="p-2.5">
-                      <p className="text-xs text-slate-600 font-medium leading-tight line-clamp-2">
-                        {c.headline || c.ad_name || c.campaign_name}
-                      </p>
-                      {c.description && (
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">{c.description}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+      <div className="flex flex-col md:flex-row gap-6">
+        <CreativeCarousel
+          platform="google"
+          label="Google"
+          badgeClass="text-blue-700 bg-blue-50 border border-blue-100"
+          creatives={creativesData.google}
+          index={carouselIndex.google}
+          onIndexChange={(newIndex) => setCarouselIndex(prev => ({ ...prev, google: newIndex }))}
+          onImageClick={setLightboxUrl}
+          showTypeTag={true}
+        />
+        <CreativeCarousel
+          platform="facebook"
+          label="Facebook"
+          badgeClass="text-indigo-700 bg-indigo-50 border border-indigo-100"
+          creatives={creativesData.facebook}
+          index={carouselIndex.facebook}
+          onIndexChange={(newIndex) => setCarouselIndex(prev => ({ ...prev, facebook: newIndex }))}
+          onImageClick={setLightboxUrl}
+          showTypeTag={false}
+        />
+        <CreativeCarousel
+          platform="instagram"
+          label="Instagram"
+          badgeClass="text-pink-700 bg-pink-50 border border-pink-100"
+          creatives={creativesData.instagram}
+          index={carouselIndex.instagram}
+          onIndexChange={(newIndex) => setCarouselIndex(prev => ({ ...prev, instagram: newIndex }))}
+          onImageClick={setLightboxUrl}
+          showTypeTag={false}
+        />
       </div>
     )}
   </div>
