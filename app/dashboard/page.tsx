@@ -190,6 +190,9 @@ export default function OverviewPage() {
   const [selectedKpi, setSelectedKpi] = useState('driving_directions')
   const [selectedChartMonth, setSelectedChartMonth] = useState('all')
   const [selectedState, setSelectedState] = useState('all')
+  const [viewMode, setViewMode] = useState<'monthly' | 'daterange'>('monthly')
+  const [dateFrom, setDateFrom] = useState('2025-05-28')
+  const [dateTo, setDateTo] = useState('2026-03-31')
 
   // Load dealers then metrics once on mount — hardcoded full campaign date range
   useEffect(() => {
@@ -271,7 +274,14 @@ export default function OverviewPage() {
   const topPerformers = useMemo(() => {
     const byDealer: Record<string, any> = {}
     overviewCalls.forEach((r: any) => {
-      if (selectedChartMonth !== 'all' && r.month !== selectedChartMonth) return
+      let include = false
+      if (viewMode === 'monthly') {
+        include = selectedChartMonth === 'all' || r.month === selectedChartMonth
+      } else {
+        const monthKey = r.month
+        include = monthKey >= dateFrom.substring(0, 7) && monthKey <= dateTo.substring(0, 7)
+      }
+      if (!include) return
       if (!byDealer[r.dealer_id]) {
         byDealer[r.dealer_id] = {
           dealer_id: r.dealer_id,
@@ -296,7 +306,7 @@ export default function OverviewPage() {
       })
       .sort((a: any, b: any) => b.calls_received - a.calls_received)
       .slice(0, 15)
-  }, [overviewCalls, dealers, selectedChartMonth])
+  }, [overviewCalls, dealers, selectedChartMonth, viewMode, dateFrom, dateTo])
 
   // ── Pie chart data ────────────────────────────────────────────────────────────
 
@@ -306,7 +316,13 @@ export default function OverviewPage() {
       const answeredAgg: Record<string, number> = {}
       const missedAgg: Record<string, number> = {}
       overviewCalls.forEach((r: any) => {
-        if (selectedChartMonth !== 'all' && r.month !== selectedChartMonth) return
+        let include = false
+        if (viewMode === 'monthly') {
+          include = selectedChartMonth === 'all' || r.month === selectedChartMonth
+        } else {
+          include = r.month >= dateFrom.substring(0, 7) && r.month <= dateTo.substring(0, 7)
+        }
+        if (!include) return
         const dealer = dealersMap[r.dealer_id]
         if (!dealer?.zone) return
         agg[dealer.zone] = (agg[dealer.zone] || 0) + (r.calls_received || 0)
@@ -319,7 +335,13 @@ export default function OverviewPage() {
         .sort((a, b) => b.value - a.value)
     } else {
       metrics.forEach((row: any) => {
-        if (selectedChartMonth !== 'all' && !row.metric_date?.startsWith(selectedChartMonth)) return
+        let include = false
+        if (viewMode === 'monthly') {
+          include = selectedChartMonth === 'all' || row.metric_date?.startsWith(selectedChartMonth)
+        } else {
+          include = row.metric_date >= dateFrom && row.metric_date <= dateTo
+        }
+        if (!include) return
         const dealer = dealersMap[row.dealer_id]
         if (!dealer?.zone) return
         agg[dealer.zone] = (agg[dealer.zone] || 0) + ((row[selectedKpi] as number) || 0)
@@ -329,7 +351,7 @@ export default function OverviewPage() {
         .filter((e) => e.value > 0)
         .sort((a, b) => b.value - a.value)
     }
-  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth])
+  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
 
   const tierPieData = useMemo((): { name: string; value: number }[] => {
     const agg: Record<string, number> = {}
@@ -337,7 +359,13 @@ export default function OverviewPage() {
       const answeredAgg: Record<string, number> = {}
       const missedAgg: Record<string, number> = {}
       overviewCalls.forEach((r: any) => {
-        if (selectedChartMonth !== 'all' && r.month !== selectedChartMonth) return
+        let include = false
+        if (viewMode === 'monthly') {
+          include = selectedChartMonth === 'all' || r.month === selectedChartMonth
+        } else {
+          include = r.month >= dateFrom.substring(0, 7) && r.month <= dateTo.substring(0, 7)
+        }
+        if (!include) return
         const dealer = dealersMap[r.dealer_id]
         if (!dealer?.market) return
         agg[dealer.market] = (agg[dealer.market] || 0) + (r.calls_received || 0)
@@ -350,7 +378,13 @@ export default function OverviewPage() {
         .sort((a, b) => b.value - a.value)
     } else {
       metrics.forEach((row: any) => {
-        if (selectedChartMonth !== 'all' && !row.metric_date?.startsWith(selectedChartMonth)) return
+        let include = false
+        if (viewMode === 'monthly') {
+          include = selectedChartMonth === 'all' || row.metric_date?.startsWith(selectedChartMonth)
+        } else {
+          include = row.metric_date >= dateFrom && row.metric_date <= dateTo
+        }
+        if (!include) return
         const dealer = dealersMap[row.dealer_id]
         if (!dealer?.market) return
         agg[dealer.market] = (agg[dealer.market] || 0) + ((row[selectedKpi] as number) || 0)
@@ -360,7 +394,7 @@ export default function OverviewPage() {
         .filter((e) => e.value > 0)
         .sort((a, b) => b.value - a.value)
     }
-  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth])
+  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
 
   // ── State bar chart data (by month) ────────────────────────────────────────
 
@@ -380,14 +414,24 @@ export default function OverviewPage() {
 
   const stateBarData = useMemo((): { month: string; value: number }[] => {
     const agg: Record<string, number> = {}
-    MONTHS_FOR_CHART.forEach((m) => { agg[m.key] = 0 })
+    const relevantMonths = viewMode === 'monthly'
+      ? MONTHS_FOR_CHART
+      : MONTHS_FOR_CHART.filter(m => m.key >= dateFrom.substring(0, 7) && m.key <= dateTo.substring(0, 7))
+    relevantMonths.forEach((m) => { agg[m.key] = 0 })
 
     if (selectedKpi === 'calls_received') {
       const answeredAgg: Record<string, number> = {}
       const missedAgg: Record<string, number> = {}
-      MONTHS_FOR_CHART.forEach((m) => { answeredAgg[m.key] = 0; missedAgg[m.key] = 0 })
+      relevantMonths.forEach((m) => { answeredAgg[m.key] = 0; missedAgg[m.key] = 0 })
       overviewCalls.forEach((r: any) => {
         if (!agg.hasOwnProperty(r.month)) return
+        let include = false
+        if (viewMode === 'monthly') {
+          include = selectedState === 'all' || true
+        } else {
+          include = r.month >= dateFrom.substring(0, 7) && r.month <= dateTo.substring(0, 7)
+        }
+        if (!include) return
         const dealer = dealersMap[r.dealer_id]
         if (!dealer?.state) return
         if (selectedState !== 'all' && dealer.state !== selectedState) return
@@ -395,7 +439,7 @@ export default function OverviewPage() {
         answeredAgg[r.month] += (r.calls_answered || 0)
         missedAgg[r.month] += (r.calls_missed || 0)
       })
-      return MONTHS_FOR_CHART.map((m) => ({
+      return relevantMonths.map((m) => ({
         month: m.label,
         value: agg[m.key],
         answered: answeredAgg[m.key],
@@ -405,17 +449,24 @@ export default function OverviewPage() {
       metrics.forEach((row: any) => {
         const monthKey = row.metric_date?.substring(0, 7)
         if (!monthKey || !agg.hasOwnProperty(monthKey)) return
+        let include = false
+        if (viewMode === 'monthly') {
+          include = selectedState === 'all' || true
+        } else {
+          include = row.metric_date >= dateFrom && row.metric_date <= dateTo
+        }
+        if (!include) return
         const dealer = dealersMap[row.dealer_id]
         if (!dealer?.state) return
         if (selectedState !== 'all' && dealer.state !== selectedState) return
         agg[monthKey] += ((row[selectedKpi] as number) || 0)
       })
-      return MONTHS_FOR_CHART.map((m) => ({
+      return relevantMonths.map((m) => ({
         month: m.label,
         value: agg[m.key],
       }))
     }
-  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedState])
+  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedState, viewMode, dateFrom, dateTo])
 
   // Top 15 dealers (alphabetical) as placeholder
   const top15Dealers = useMemo(() => dealers.slice(0, 15), [dealers])
@@ -554,17 +605,73 @@ export default function OverviewPage() {
             </select>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">Month</label>
-            <select
-              value={selectedChartMonth}
-              onChange={(e) => setSelectedChartMonth(e.target.value)}
-              className={selectCls}
-            >
-              {CHART_MONTH_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+          {viewMode === 'monthly' ? (
+            <div>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">Month</label>
+              <select
+                value={selectedChartMonth}
+                onChange={(e) => setSelectedChartMonth(e.target.value)}
+                className={selectCls}
+              >
+                {CHART_MONTH_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
+                  From Date
+                </label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="min-w-[140px] px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
+                  To Date
+                </label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="min-w-[140px] px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none"
+                />
+              </div>
+            </>
+          )}
+
+          {/* Toggle */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-slate-500 uppercase tracking-wide invisible">
+              View
+            </label>
+            <div className="flex gap-1 h-9 bg-slate-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('monthly')}
+                className={`px-3 rounded-md text-[13px] font-medium transition ${
+                  viewMode === 'monthly'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setViewMode('daterange')}
+                className={`px-3 rounded-md text-[13px] font-medium transition ${
+                  viewMode === 'daterange'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Date Range
+              </button>
+            </div>
           </div>
         </div>
 
