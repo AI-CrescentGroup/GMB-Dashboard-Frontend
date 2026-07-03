@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import { logoutUser, getCurrentUser } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { LogOut, BarChart3, Users } from 'lucide-react'
@@ -13,6 +14,7 @@ const allNavItems = [
 
 export default function Header({ role }: { role?: string }) {
   const [user, setUser] = useState<any>(null)
+  const [dealerStoreName, setDealerStoreName] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
   const navItems = (role === 'branch_head' || role === 'dealer') ? allNavItems.filter(item => item.href !== '/dashboard') : allNavItems
@@ -24,6 +26,21 @@ export default function Header({ role }: { role?: string }) {
     }
     loadUser()
   }, [])
+
+  // Dealer role: show the store name instead of "Dealers" in the pill nav
+  useEffect(() => {
+    if (role !== 'dealer') return
+    const stored = JSON.parse(localStorage.getItem('user') || '{}')
+    if (!stored?.dealer_id) return
+    supabase
+      .from('dealers')
+      .select('dealer_name')
+      .eq('id', stored.dealer_id)
+      .single()
+      .then(({ data }) => {
+        if (data?.dealer_name) setDealerStoreName(data.dealer_name)
+      })
+  }, [role])
 
   async function handleLogout() {
     await logoutUser()
@@ -69,7 +86,9 @@ export default function Header({ role }: { role?: string }) {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {item.label}
+                {item.href === '/dashboard/dealers' && role === 'dealer' && dealerStoreName
+                  ? dealerStoreName
+                  : item.label}
               </Link>
             )
           })}

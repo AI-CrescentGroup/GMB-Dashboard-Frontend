@@ -411,6 +411,10 @@ export default function DealersPage() {
   const [creativesLoading, setCreativesLoading] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [carouselIndex, setCarouselIndex] = useState<{ google: number; facebook: number; instagram: number }>({ google: 0, facebook: 0, instagram: 0 })
+  const [allTimeMetrics, setAllTimeMetrics] = useState<any[]>([])
+  const [allTimeCalls, setAllTimeCalls] = useState<any[]>([])
+
+  const isRestrictedRole = role === 'dealer' || role === 'branch_head'
 
   // Read role + auto-select dealer from localStorage
   useEffect(() => {
@@ -458,6 +462,22 @@ export default function DealersPage() {
     const ids = selectedDealerId ? [selectedDealerId] : dealers.map((d: any) => d.id)
     getCallMetrics(ids, monthFrom, monthTo).then(setCallMetrics)
   }, [dealers, selectedDealerId, selectedMonth, dateFrom, dateTo, viewMode])
+
+  // All-time unfiltered fetch for dealer/branch_head KPI strip.
+  // Ignores month/date filters AND dealer selection: dealer sees own store,
+  // branch_head sees all assigned dealers combined (scope enforced by RLS).
+  useEffect(() => {
+    if (!isRestrictedRole || dealers.length === 0) return
+    let cancelled = false
+    const ids = dealers.map((d: any) => d.id)
+    getMetrics(ids, '2025-05-28', '2026-03-31', []).then((data) => {
+      if (!cancelled) setAllTimeMetrics(data)
+    })
+    getCallMetrics(ids, '2025-05', '2026-03').then((data) => {
+      if (!cancelled) setAllTimeCalls(data)
+    })
+    return () => { cancelled = true }
+  }, [isRestrictedRole, dealers])
 
   // Load budgets whenever dealer selection changes
   useEffect(() => {
@@ -516,6 +536,25 @@ export default function DealersPage() {
     })
     return { totalSpend, totalImpressions, totalClicks, websiteVisits }
   }, [displayMetrics])
+
+  const allTimeKpi = useMemo(() => {
+    let totalSpend = 0, totalImpressions = 0, totalClicks = 0, websiteVisits = 0
+    allTimeMetrics.forEach((m: any) => {
+      totalSpend += m.spend_inr || 0
+      if (m.platform === 'google' || m.platform === 'facebook' || m.platform === 'instagram') {
+        totalImpressions += m.impressions || 0
+        totalClicks += m.link_clicks || 0
+      }
+      if (m.platform === 'ga4') websiteVisits += m.website_visits || 0
+    })
+    return { totalSpend, totalImpressions, totalClicks, websiteVisits }
+  }, [allTimeMetrics])
+
+  const allTimeCallTotals = useMemo(() => {
+    const received = allTimeCalls.reduce((s: number, r: any) => s + (r.calls_received || 0), 0)
+    const answered = allTimeCalls.reduce((s: number, r: any) => s + (r.calls_answered || 0), 0)
+    return { received, answered }
+  }, [allTimeCalls])
 
   const googleCampaigns = useMemo(
     () => groupCampaigns(displayMetrics.filter((m: any) => m.platform === 'google')),
@@ -684,6 +723,49 @@ export default function DealersPage() {
         <span className="text-xs text-slate-400">Updated till: {latestDate}</span>
       </div>
 
+      {/* ── All-time KPI Strip (dealer + branch_head only, above filters, filter-independent) ── */}
+      {isRestrictedRole && (
+        <div className="mb-6">
+          <div className="text-xs text-slate-400 mb-2">All-time totals</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <KpiCard
+              icon={<TrendingUp size={16} className="text-indigo-500" />}
+              label="Total Spend"
+              value={formatCurrency(allTimeKpi.totalSpend)}
+            />
+            <KpiCard
+              icon={<Eye size={16} className="text-blue-500" />}
+              label="Impressions"
+              value={formatMillions(allTimeKpi.totalImpressions)}
+            />
+            <KpiCard
+              icon={<Activity size={16} className="text-slate-300" />}
+              label="Reach"
+              value="—"
+              note="All Meta campaigns · full period"
+            />
+            <KpiCard
+              icon={<Zap size={16} className="text-amber-500" />}
+              label="Link Clicks"
+              value={role === 'dealer' ? formatNumber(allTimeKpi.totalClicks) : formatMillions(allTimeKpi.totalClicks)}
+            />
+            <KpiCard
+              icon={<Activity size={16} className="text-emerald-500" />}
+              label="Website Visits"
+              value={formatNumber(allTimeKpi.websiteVisits)}
+            />
+            <KpiCard
+              icon={<Phone size={16} className="text-emerald-500" />}
+              label="Calls"
+              value={allTimeCallTotals.received > 0 ? formatNumber(allTimeCallTotals.received) : '—'}
+              subtitle={allTimeCallTotals.received > 0
+                ? `${Math.round((allTimeCallTotals.answered / allTimeCallTotals.received) * 100)}% answered (${formatNumber(allTimeCallTotals.answered)})`
+                : 'No call data'}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── Filter Bar ── */}
       <div className="flex flex-wrap items-end gap-3 mb-6 bg-white rounded-xl border border-slate-200 shadow px-5 py-4">
 
@@ -807,7 +889,8 @@ export default function DealersPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          {/* ── KPI Strip ── */}
+          {/* ── KPI Strip (admin only — dealer/branch_head see the all-time strip above filters) ── */}
+          {!isRestrictedRole && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <KpiCard
               icon={<TrendingUp size={16} className="text-indigo-500" />}
@@ -844,6 +927,7 @@ export default function DealersPage() {
                 : 'No call data'}
             />
           </div>
+          )}
 
           {/* ── Google Ads Table ── */}
           <div className="bg-white rounded-xl border border-slate-200 shadow overflow-hidden">
