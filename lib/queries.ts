@@ -362,3 +362,33 @@ export async function getAdCreatives(dealerId: string): Promise<{
     instagram: rows.filter(r => r.platform === 'instagram'),
   }
 }
+
+// Get live Meta reach (calls the FastAPI backend, not Supabase directly)
+export async function getReach(
+  dealerIds: string[] | null,  // null = all dealers
+  dateFrom: string,
+  dateTo: string,
+  platforms: string[]          // ['facebook'], ['instagram'], or both
+): Promise<{
+  reach: number | null;
+  campaign_count: number;
+  dealers_requested: number;
+  dealers_covered: number;
+  dealers_without_mapping: string[];
+  cached: boolean;
+} | null> {
+  try {
+    const params = new URLSearchParams({
+      dealer_ids: dealerIds ? dealerIds.join(',') : 'all',
+      date_from: dateFrom,
+      date_to: dateTo,
+      platforms: platforms.join(','),
+    })
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/reach?${params}`)
+    if (!res.ok) return null
+    return await res.json()
+  } catch (e) {
+    console.error('getReach failed:', e)
+    return null  // caller must treat null as "show —", never as 0
+  }
+}

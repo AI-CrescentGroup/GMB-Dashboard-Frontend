@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
-import { getDealers, getMetrics, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives } from '@/lib/queries'
+import { getDealers, getMetrics, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives, getReach } from '@/lib/queries'
 import { exportDealerPPT } from '@/lib/exportPPT'
 import { Select } from '@/components/ui/select'
+import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
 import {
   Download, Navigation, MapPin, Phone, Eye, Zap, TrendingUp, Activity, Camera,
 } from 'lucide-react'
@@ -156,6 +157,7 @@ function KpiCard({
   note,
   subtitle,
   bgClass = 'bg-white',
+  title,
 }: {
   icon: ReactNode
   label: string
@@ -163,9 +165,10 @@ function KpiCard({
   note?: string
   subtitle?: string
   bgClass?: string
+  title?: string
 }) {
   return (
-    <div className={`${bgClass} rounded-xl border border-slate-200 shadow p-5`}>
+    <div className={`${bgClass} rounded-xl border border-slate-200 shadow p-5`} title={title}>
       <div className="flex items-center gap-2 mb-2">
         {icon}
         <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">{label}</span>
@@ -192,6 +195,8 @@ function CampaignTable({
   budgetInr,
   reachValue,
   showReachLabel,
+  liveReach,
+  reachLoading,
 }: {
   campaigns: ReturnType<typeof groupCampaigns>
   dealerStatus: string | null | undefined
@@ -200,6 +205,11 @@ function CampaignTable({
   budgetInr?: number
   reachValue?: number
   showReachLabel?: boolean
+  // Live Meta API reach (Rule B path): undefined = not in live mode, fall
+  // back to the legacy reachValue rendering below unchanged. null = live
+  // call returned an error. number (incl. 0) = a real fetched value.
+  liveReach?: number | null
+  reachLoading?: boolean
 }) {
   if (campaigns.length === 0) {
     return (
@@ -215,6 +225,33 @@ function CampaignTable({
   const summaryCpc = totalClicks > 0 ? (totalSpend / totalClicks).toFixed(2) : '0.00'
   const summaryCpm = totalImpressions > 0 ? ((totalSpend / totalImpressions) * 1000).toFixed(2) : '0.00'
   const campaignCount = campaigns.length
+
+  // Reach cell content: loading spinner > live-fetch result (Rule B) >
+  // legacy reachValue rendering (untouched — same condition/output as before).
+  function renderReachCell() {
+    if (showReachLabel === false) return ''
+    if (reachLoading) {
+      return <span className="inline-block h-3 w-3 rounded-full border-2 border-slate-300 border-t-indigo-500 animate-spin" />
+    }
+    if (liveReach !== undefined) {
+      return liveReach === null
+        ? <span className="text-slate-400">—</span>
+        : <span className="text-slate-700 font-medium">{formatNumber(liveReach)}</span>
+    }
+    return reachValue && reachValue > 0 ? (
+      <span className="text-slate-700 font-medium">{formatNumber(reachValue)}</span>
+    ) : (
+      <span className="text-slate-400">—*</span>
+    )
+  }
+
+  function reachCellTitle(): string | undefined {
+    if (showReachLabel === false || reachLoading) return undefined
+    if (liveReach !== undefined) {
+      return liveReach === null ? "Reach unavailable — check connection" : undefined
+    }
+    return !reachValue ? "Live Meta API — coming soon" : undefined
+  }
 
   return (
     <table className="w-full table-fixed text-sm">
@@ -248,19 +285,8 @@ function CampaignTable({
             </td>
             <td className={`${TD} text-center w-[8%]`}>{formatMillions(totalClicks)}</td>
             <td className={`${TD} text-center w-[9%]`}>{formatMillions(totalImpressions)}</td>
-            <td
-              className={`${TD} text-center w-[7%]`}
-              title={showReachLabel !== false && !reachValue ? "Live Meta API — coming soon" : undefined}
-            >
-              {showReachLabel === false ? (
-                ''
-              ) : reachValue && reachValue > 0 ? (
-                <span className="text-slate-700 font-medium">
-                  {formatNumber(reachValue)}
-                </span>
-              ) : (
-                <span className="text-slate-400">—*</span>
-              )}
+            <td className={`${TD} text-center w-[7%]`} title={reachCellTitle()}>
+              {renderReachCell()}
             </td>
             <td className={`${TD} text-center w-[7%]`}>{summaryCtr}%</td>
             <td className={`${TD} text-center w-[8%]`}>₹{showCpm ? summaryCpm : summaryCpc}</td>
@@ -288,19 +314,8 @@ function CampaignTable({
               </td>
               <td className={`${TD} text-center w-[8%]`}>{formatNumber(c.clicks)}</td>
               <td className={`${TD} text-center w-[9%]`}>{formatMillions(c.impressions)}</td>
-              <td
-                className={`${TD} text-center w-[7%]`}
-                title={showReachLabel !== false && !reachValue ? "Live Meta API — coming soon" : undefined}
-              >
-                {showReachLabel === false ? (
-                  ''
-                ) : reachValue && reachValue > 0 ? (
-                  <span className="text-slate-700 font-medium">
-                    {formatNumber(reachValue)}
-                  </span>
-                ) : (
-                  <span className="text-slate-400">—*</span>
-                )}
+              <td className={`${TD} text-center w-[7%]`} title={reachCellTitle()}>
+                {renderReachCell()}
               </td>
               <td className={`${TD} text-center w-[7%]`}>{c.ctr}%</td>
               <td className={`${TD} text-center w-[8%]`}>₹{showCpm ? c.cpm : c.cpc}</td>
@@ -414,6 +429,24 @@ export default function DealersPage() {
   const [allTimeMetrics, setAllTimeMetrics] = useState<any[]>([])
   const [allTimeCalls, setAllTimeCalls] = useState<any[]>([])
 
+  // Live Meta reach — admin filtered KPI card
+  const [reachData, setReachData] = useState<Awaited<ReturnType<typeof getReach>>>(null)
+  const [reachLoading, setReachLoading] = useState(true)
+
+  // Live Meta reach — dealer/branch_head all-time KPI card
+  const [allTimeReachData, setAllTimeReachData] = useState<Awaited<ReturnType<typeof getReach>>>(null)
+  const [allTimeReachLoading, setAllTimeReachLoading] = useState(true)
+
+  // Live Meta reach — FB/IG table columns (multi-day range or "all dealers" only;
+  // single-dealer + single-day case keeps the existing reachByPlatform mechanism)
+  const [tableReach, setTableReach] = useState<{
+    facebook: { value: number | null; loading: boolean }
+    instagram: { value: number | null; loading: boolean }
+  }>({
+    facebook: { value: null, loading: false },
+    instagram: { value: null, loading: false },
+  })
+
   const isRestrictedRole = role === 'dealer' || role === 'branch_head'
 
   // Read role + auto-select dealer from localStorage
@@ -470,12 +503,21 @@ export default function DealersPage() {
     if (!isRestrictedRole || dealers.length === 0) return
     let cancelled = false
     const ids = dealers.map((d: any) => d.id)
-    getMetrics(ids, '2025-05-28', '2026-03-31', []).then((data) => {
+    getMetrics(ids, ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO, []).then((data) => {
       if (!cancelled) setAllTimeMetrics(data)
     })
     getCallMetrics(ids, '2025-05', '2026-03').then((data) => {
       if (!cancelled) setAllTimeCalls(data)
     })
+
+    // Live Meta reach — always a real API call, never derived from stored data.
+    setAllTimeReachLoading(true)
+    getReach(ids, ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO, ['facebook', 'instagram']).then((result) => {
+      if (cancelled) return
+      setAllTimeReachData(result)
+      setAllTimeReachLoading(false)
+    })
+
     return () => { cancelled = true }
   }, [isRestrictedRole, dealers])
 
@@ -523,6 +565,58 @@ export default function DealersPage() {
     })
     return { facebook, instagram }
   }, [displayMetrics, isSingleDay])
+
+  // Admin filtered Reach KPI card — ALWAYS a live call (Rule A: combined KPI
+  // never uses stored data), scoped to the current filter state.
+  useEffect(() => {
+    if (isRestrictedRole) return
+    let cancelled = false
+    const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
+    const ids = selectedDealerId ? [selectedDealerId] : null
+
+    setReachLoading(true)
+    setReachData(null)
+    getReach(ids, from, to, ['facebook', 'instagram']).then((result) => {
+      if (cancelled) return
+      setReachData(result)
+      setReachLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [isRestrictedRole, selectedDealerId, viewMode, selectedMonth, dateFrom, dateTo])
+
+  // FB/IG table Reach columns — Rule B: single dealer + single day keeps the
+  // existing reachByPlatform mechanism (daily_metrics.reach) untouched; every
+  // other combination (multi-day range, or "all dealers") makes a live call.
+  useEffect(() => {
+    const useLiveFetch = !(selectedDealerId && isSingleDay)
+    if (!useLiveFetch) {
+      setTableReach({
+        facebook: { value: null, loading: false },
+        instagram: { value: null, loading: false },
+      })
+      return
+    }
+
+    let cancelled = false
+    const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
+    const ids = selectedDealerId ? [selectedDealerId] : null
+
+    setTableReach({
+      facebook: { value: null, loading: true },
+      instagram: { value: null, loading: true },
+    })
+
+    getReach(ids, from, to, ['facebook']).then((result) => {
+      if (cancelled) return
+      setTableReach((prev) => ({ ...prev, facebook: { value: result ? result.reach : null, loading: false } }))
+    })
+    getReach(ids, from, to, ['instagram']).then((result) => {
+      if (cancelled) return
+      setTableReach((prev) => ({ ...prev, instagram: { value: result ? result.reach : null, loading: false } }))
+    })
+
+    return () => { cancelled = true }
+  }, [selectedDealerId, isSingleDay, viewMode, selectedMonth, dateFrom, dateTo])
 
   const kpi = useMemo(() => {
     let totalSpend = 0, totalImpressions = 0, totalClicks = 0, websiteVisits = 0
@@ -741,8 +835,19 @@ export default function DealersPage() {
             <KpiCard
               icon={<Activity size={16} className="text-slate-300" />}
               label="Reach"
-              value="—"
-              note="All Meta campaigns · full period"
+              value={
+                allTimeReachLoading ? '…'
+                : allTimeReachData?.reach == null ? '—'
+                : formatNumber(allTimeReachData.reach)
+              }
+              note={
+                allTimeReachLoading ? 'All Meta campaigns · full period'
+                : allTimeReachData?.reach == null ? 'Reach unavailable'
+                : allTimeReachData.dealers_covered < allTimeReachData.dealers_requested
+                  ? `All Meta campaigns · full period · ${allTimeReachData.dealers_covered}/${allTimeReachData.dealers_requested} dealers`
+                  : 'All Meta campaigns · full period'
+              }
+              title={!allTimeReachLoading && allTimeReachData?.reach == null ? 'Reach unavailable — check connection' : undefined}
             />
             <KpiCard
               icon={<Zap size={16} className="text-amber-500" />}
@@ -905,8 +1010,19 @@ export default function DealersPage() {
             <KpiCard
               icon={<Activity size={16} className="text-slate-300" />}
               label="Reach"
-              value="—"
-              note="Meta API (coming soon)"
+              value={
+                reachLoading ? '…'
+                : reachData?.reach == null ? '—'
+                : formatNumber(reachData.reach)
+              }
+              note={
+                reachLoading ? undefined
+                : reachData?.reach == null ? 'Reach unavailable'
+                : reachData.dealers_covered < reachData.dealers_requested
+                  ? `${reachData.dealers_covered}/${reachData.dealers_requested} dealers`
+                  : undefined
+              }
+              title={!reachLoading && reachData?.reach == null ? 'Reach unavailable — check connection' : undefined}
             />
             <KpiCard
               icon={<Zap size={16} className="text-amber-500" />}
@@ -977,6 +1093,8 @@ export default function DealersPage() {
                 budgetInr={facebookBudget}
                 showReachLabel={true}
                 reachValue={isSingleDay ? reachByPlatform.facebook : undefined}
+                liveReach={(selectedDealerId && isSingleDay) ? undefined : tableReach.facebook.value}
+                reachLoading={(selectedDealerId && isSingleDay) ? false : tableReach.facebook.loading}
               />
             </div>
           </div>
@@ -1004,6 +1122,8 @@ export default function DealersPage() {
                 budgetInr={instagramBudget}
                 showReachLabel={true}
                 reachValue={isSingleDay ? reachByPlatform.instagram : undefined}
+                liveReach={(selectedDealerId && isSingleDay) ? undefined : tableReach.instagram.value}
+                reachLoading={(selectedDealerId && isSingleDay) ? false : tableReach.instagram.loading}
               />
             </div>
           </div>
@@ -1038,7 +1158,7 @@ export default function DealersPage() {
 
               {/* Website Visits & User Journey */}
               <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4">
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">Website Visits &amp; User Journey</h3>
+                <h3 className="text-sm font-semibold text-slate-800 mb-3">Website - Visits and User Journey</h3>
                 <table className="w-full">
                   <tbody>
                     <tr>
@@ -1058,10 +1178,9 @@ export default function DealersPage() {
                       </td>
                     </tr>
                     {[
-                      { label: 'Call Number Track', value: conversions.callNumberTrack },
-                      { label: 'Call Track', value: conversions.callTrack },
+                      { label: 'Call Clicks', value: conversions.callNumberTrack + conversions.callTrack },
                       { label: 'Download Catalogue', value: conversions.downloadCatalogue },
-                      { label: 'Drive Direction (GA4 event)', value: conversions.driveDirection },
+                      { label: 'Drive Direction', value: conversions.driveDirection },
                       { label: 'Enquiry Track', value: conversions.enquiryTrack },
                       { label: 'Form Submit', value: conversions.formSubmit },
                     ].map(({ label, value }) => (

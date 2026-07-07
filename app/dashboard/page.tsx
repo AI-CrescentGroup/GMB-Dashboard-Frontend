@@ -5,8 +5,9 @@ import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { getDealers, getMetrics, getCallMetrics, getBudgets } from '@/lib/queries'
+import { getDealers, getMetrics, getCallMetrics, getBudgets, getReach } from '@/lib/queries'
 import { TrendingUp, MapPin, Activity, Phone, Navigation, Eye, Zap, MousePointerClick } from 'lucide-react'
+import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
 
 const DATE_FROM = '2025-05-28'
 const DATE_TO = '2026-03-31'
@@ -55,6 +56,12 @@ const STATE_OPTIONS = [
   { value: 'UTTRAKHAND', label: 'Uttrakhand' },
   { value: 'WEST BENGAL', label: 'West Bengal' },
 ]
+
+const TOP_PERFORMERS_KPI_OPTIONS = [
+  { value: 'calls_received', label: 'Call Volume' },
+  { value: 'website_visits', label: 'Website Visits' },
+  { value: 'driving_directions', label: 'Driving Directions' },
+] as const
 
 const KPI_OPTIONS = [
   { value: 'calls_received', label: 'Calls' },
@@ -116,6 +123,7 @@ function KpiCard({
   prefix,
   suffix,
   subtitle,
+  title,
 }: {
   icon: React.ReactNode
   label: string
@@ -124,9 +132,10 @@ function KpiCard({
   prefix?: string
   suffix?: string
   subtitle?: string
+  title?: string
 }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+    <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4" title={title}>
       <div className="flex items-center gap-2 mb-1.5">
         {icon}
         <span className="text-[11px] text-slate-500 uppercase tracking-wide font-medium">{label}</span>
@@ -188,11 +197,25 @@ export default function OverviewPage() {
 
   // chart controls
   const [selectedKpi, setSelectedKpi] = useState('driving_directions')
+  const [topPerformersKpi, setTopPerformersKpi] = useState<'calls_received' | 'website_visits' | 'driving_directions'>('calls_received')
   const [selectedChartMonth, setSelectedChartMonth] = useState('all')
   const [selectedState, setSelectedState] = useState('all')
   const [viewMode, setViewMode] = useState<'monthly' | 'daterange'>('monthly')
   const [dateFrom, setDateFrom] = useState('2025-05-28')
   const [dateTo, setDateTo] = useState('2026-03-31')
+
+  // Live Meta reach KPI card — always unfiltered (locked decision: Overview
+  // KPI cards don't respond to the date filter). Fetches once on mount and
+  // never refetches — do not add filter state to this effect's deps.
+  const [reachData, setReachData] = useState<Awaited<ReturnType<typeof getReach>>>(null)
+  const [reachLoading, setReachLoading] = useState(true)
+
+  useEffect(() => {
+    getReach(null, ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO, ['facebook', 'instagram']).then((data) => {
+      setReachData(data)
+      setReachLoading(false)
+    })
+  }, [])
 
   // Load dealers then metrics once on mount — hardcoded full campaign date range
   useEffect(() => {
@@ -307,6 +330,42 @@ export default function OverviewPage() {
       .sort((a: any, b: any) => b.calls_received - a.calls_received)
       .slice(0, 15)
   }, [overviewCalls, dealers, selectedChartMonth, viewMode, dateFrom, dateTo])
+
+  // ── Top Performers (website visits / driving directions) ───────────────────────
+  // Same metrics/date-filter pattern as topPerformers above, but sourced from
+  // `metrics` (daily_metrics) gated by platform, mirroring the `kpi` useMemo's
+  // explicit platform gate rather than the pie/bar charts' implicit null-field reliance.
+
+  const topPerformersByMetric = useMemo(() => {
+    if (topPerformersKpi === 'calls_received') return []
+    const platform = topPerformersKpi === 'website_visits' ? 'ga4' : 'gmb'
+    const field = topPerformersKpi
+    const byDealer: Record<string, number> = {}
+    metrics.forEach((row: any) => {
+      if (row.platform !== platform) return
+      let include = false
+      if (viewMode === 'monthly') {
+        include = selectedChartMonth === 'all' || row.metric_date?.startsWith(selectedChartMonth)
+      } else {
+        include = row.metric_date >= dateFrom && row.metric_date <= dateTo
+      }
+      if (!include) return
+      byDealer[row.dealer_id] = (byDealer[row.dealer_id] || 0) + (row[field] || 0)
+    })
+    return Object.entries(byDealer)
+      .map(([dealer_id, value]) => {
+        const dealer = dealers.find((od: any) => od.id === dealer_id)
+        return {
+          dealer_id,
+          value,
+          dealer_name: dealer?.dealer_name ?? '—',
+          zone: dealer?.zone ?? '—',
+          tier: dealer?.market ?? '—',
+        }
+      })
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 15)
+  }, [metrics, dealers, topPerformersKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
 
   // ── Pie chart data ────────────────────────────────────────────────────────────
 
@@ -516,8 +575,19 @@ export default function OverviewPage() {
           <KpiCard
             icon={<Activity size={16} className="text-slate-300" />}
             label="Reach"
-            value="—"
-            note="Meta API (coming soon)"
+            value={
+              reachLoading ? '…'
+              : reachData?.reach == null ? '—'
+              : formatNumber(reachData.reach)
+            }
+            note={
+              reachLoading ? 'All Meta campaigns · full period'
+              : reachData?.reach == null ? 'Reach unavailable'
+              : reachData.dealers_covered < reachData.dealers_requested
+                ? `All Meta campaigns · full period · ${reachData.dealers_covered}/${reachData.dealers_requested} dealers`
+                : 'All Meta campaigns · full period'
+            }
+            title={!reachLoading && reachData?.reach == null ? 'Reach unavailable — check connection' : undefined}
           />
           <KpiCard
             icon={<TrendingUp size={16} className="text-indigo-500" />}
@@ -832,8 +902,19 @@ export default function OverviewPage() {
       <div>
         <div className="flex items-center justify-between border-l-4 border-indigo-500 pl-3 mb-3">
           <div>
-            <span className="text-sm font-semibold text-slate-800">Top Performers — Call Volume</span>
+            <span className="text-sm font-semibold text-slate-800">
+              Top (#15) Performers - {TOP_PERFORMERS_KPI_OPTIONS.find((o) => o.value === topPerformersKpi)?.label}
+            </span>
           </div>
+          <select
+            value={topPerformersKpi}
+            onChange={(e) => setTopPerformersKpi(e.target.value as typeof topPerformersKpi)}
+            className={selectCls}
+          >
+            {TOP_PERFORMERS_KPI_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
@@ -843,7 +924,7 @@ export default function OverviewPage() {
                 <div key={i} className="bg-slate-100 animate-pulse rounded h-10" />
               ))}
             </div>
-          ) : (
+          ) : topPerformersKpi === 'calls_received' ? (
             <div className="overflow-x-auto">
               <table
                 className="w-full text-sm"
@@ -908,6 +989,51 @@ export default function OverviewPage() {
                         </tr>
                       )
                     })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table
+                className="w-full text-sm"
+                style={{ tableLayout: 'fixed', minWidth: '700px' }}
+              >
+                <colgroup>
+                  <col style={{ width: '48px' }} />
+                  <col style={{ width: '300px' }} />
+                  <col style={{ width: '140px' }} />
+                  <col style={{ width: '100px' }} />
+                  <col style={{ width: '165px' }} />
+                </colgroup>
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">#</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">Store Name</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">Zone</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">Tier</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-4 py-3 text-center">
+                      {TOP_PERFORMERS_KPI_OPTIONS.find((o) => o.value === topPerformersKpi)?.label}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topPerformersByMetric.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-12 text-slate-400">
+                        No data for selected period
+                      </td>
+                    </tr>
+                  ) : (
+                    topPerformersByMetric.map((d, i) => (
+                      <tr key={d.dealer_id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 text-slate-400 text-xs font-mono border-b border-slate-50 text-center">{i + 1}</td>
+                        <td className="px-4 py-3 font-medium text-slate-900 text-sm border-b border-slate-50 truncate text-center">{d.dealer_name}</td>
+                        <td className="px-4 py-3 text-slate-500 text-sm border-b border-slate-50 text-center">{d.zone}</td>
+                        <td className="px-4 py-3 text-slate-500 text-sm border-b border-slate-50 text-center">{d.tier}</td>
+                        <td className="px-4 py-3 text-slate-700 text-sm border-b border-slate-50 text-center">{formatNumber(d.value)}</td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
