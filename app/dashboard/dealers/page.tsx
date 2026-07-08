@@ -185,6 +185,72 @@ function KpiCard({
 const TH = 'text-xs uppercase text-slate-400 font-medium px-4 py-3 text-right whitespace-nowrap'
 const TD = 'px-4 py-3 text-slate-700 border-b border-slate-50 text-right text-sm'
 
+// ─── Campaign accordion card (mobile/tablet, <xl) ─────────────────────────────
+
+function CampaignAccordionCard({
+  name,
+  status,
+  period,
+  budget,
+  clicks,
+  impressions,
+  reach,
+  reachTitle,
+  ctr,
+  metricLabel,
+  metricValue,
+  spend,
+  isExpanded,
+  onToggle,
+}: {
+  name: ReactNode
+  status: ReactNode
+  period: ReactNode
+  budget: ReactNode
+  clicks: string
+  impressions: string
+  reach?: ReactNode
+  reachTitle?: string
+  ctr: string
+  metricLabel: string
+  metricValue: string
+  spend: string
+  isExpanded: boolean
+  onToggle: () => void
+}) {
+  const Row = ({ label, value, title }: { label: string; value: ReactNode; title?: string }) => (
+    <div className="flex items-center justify-between gap-3 py-2 border-b border-slate-100 last:border-b-0" title={title}>
+      <span className="text-xs uppercase text-slate-400 font-medium flex-shrink-0">{label}</span>
+      <span className="text-sm text-slate-700 text-right truncate">{value}</span>
+    </div>
+  )
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <Row label="Campaign Name" value={name} />
+      <Row label="Status" value={status} />
+      <Row label="Period" value={period} />
+      {isExpanded && (
+        <>
+          <Row label="Budget" value={budget} />
+          <Row label="Link Clicks" value={clicks} />
+          <Row label="Impressions" value={impressions} />
+          {reach !== undefined && <Row label="Reach" value={reach} title={reachTitle} />}
+          <Row label="CTR %" value={`${ctr}%`} />
+          <Row label={metricLabel} value={`₹${metricValue}`} />
+          <Row label="Spend ₹" value={spend} />
+        </>
+      )}
+      <button
+        onClick={onToggle}
+        className="mt-2 w-full text-center text-xs font-medium text-indigo-600 hover:text-indigo-700 py-1.5"
+      >
+        {isExpanded ? 'See less' : 'See more'}
+      </button>
+    </div>
+  )
+}
+
 // ─── Campaign table component ─────────────────────────────────────────────────
 
 function CampaignTable({
@@ -197,6 +263,9 @@ function CampaignTable({
   showReachLabel,
   liveReach,
   reachLoading,
+  platformKey,
+  expandedCampaignId,
+  onToggleExpand,
 }: {
   campaigns: ReturnType<typeof groupCampaigns>
   dealerStatus: string | null | undefined
@@ -210,6 +279,9 @@ function CampaignTable({
   // call returned an error. number (incl. 0) = a real fetched value.
   liveReach?: number | null
   reachLoading?: boolean
+  platformKey: string
+  expandedCampaignId: string | null
+  onToggleExpand: (id: string) => void
 }) {
   if (campaigns.length === 0) {
     return (
@@ -254,7 +326,8 @@ function CampaignTable({
   }
 
   return (
-    <table className="w-full text-sm" style={{ tableLayout: 'fixed', minWidth: '1080px' }}>
+    <>
+    <table className="hidden xl:table w-full text-sm" style={{ tableLayout: 'fixed', minWidth: '1080px' }}>
       <colgroup>
         <col style={{ width: '260px' }} />
         <col style={{ width: '80px' }} />
@@ -337,6 +410,60 @@ function CampaignTable({
         )}
       </tbody>
     </table>
+
+    <div className="xl:hidden space-y-3">
+      {isAllDealers ? (
+        (() => {
+          const cid = `${platformKey}-summary`
+          return (
+            <CampaignAccordionCard
+              name={<span className="text-slate-500 italic">{campaignCount} campaigns</span>}
+              status={<span className="text-slate-400">—</span>}
+              period={<span className="text-slate-400">—</span>}
+              budget={budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
+              clicks={formatMillions(totalClicks)}
+              impressions={formatMillions(totalImpressions)}
+              reach={showReachLabel !== false ? renderReachCell() : undefined}
+              reachTitle={reachCellTitle()}
+              ctr={summaryCtr}
+              metricLabel={showCpm ? 'CPM ₹' : 'CPC ₹'}
+              metricValue={showCpm ? summaryCpm : summaryCpc}
+              spend={formatCurrency(totalSpend)}
+              isExpanded={expandedCampaignId === cid}
+              onToggle={() => onToggleExpand(cid)}
+            />
+          )
+        })()
+      ) : (
+        campaigns.map((c, i) => {
+          const cid = `${platformKey}-${i}`
+          return (
+            <CampaignAccordionCard
+              key={cid}
+              name={<span title={c.name}>{c.name}</span>}
+              status={<StatusBadge status={dealerStatus} />}
+              period={
+                c.startDate && c.endDate
+                  ? formatPeriod(c.startDate, c.endDate)
+                  : <span className="text-slate-400">—</span>
+              }
+              budget={budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
+              clicks={formatNumber(c.clicks)}
+              impressions={formatMillions(c.impressions)}
+              reach={showReachLabel !== false ? renderReachCell() : undefined}
+              reachTitle={reachCellTitle()}
+              ctr={c.ctr}
+              metricLabel={showCpm ? 'CPM ₹' : 'CPC ₹'}
+              metricValue={showCpm ? c.cpm : c.cpc}
+              spend={formatCurrency(c.spend)}
+              isExpanded={expandedCampaignId === cid}
+              onToggle={() => onToggleExpand(cid)}
+            />
+          )
+        })
+      )}
+    </div>
+    </>
   )
 }
 
@@ -438,6 +565,11 @@ export default function DealersPage() {
   const [creativesLoading, setCreativesLoading] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [carouselIndex, setCarouselIndex] = useState<{ google: number; facebook: number; instagram: number }>({ google: 0, facebook: 0, instagram: 0 })
+  // Mobile/tablet (<xl) campaign accordion — one expanded card across ALL
+  // three platform sections at a time, e.g. expanding Facebook's card
+  // collapses Google's if it was open.
+  const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null)
+  const toggleCampaignExpand = (id: string) => setExpandedCampaignId((prev) => (prev === id ? null : id))
   const [allTimeMetrics, setAllTimeMetrics] = useState<any[]>([])
   const [allTimeCalls, setAllTimeCalls] = useState<any[]>([])
 
@@ -1058,6 +1190,7 @@ export default function DealersPage() {
           )}
 
           {/* ── Google Ads Table ── */}
+          {googleCampaigns.length > 0 && (
           <div className="bg-white rounded-xl border border-slate-200 shadow overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-50">
               <div className="flex items-center justify-between">
@@ -1079,11 +1212,16 @@ export default function DealersPage() {
                 budgetInr={googleBudget}
                 showReachLabel={false}
                 reachValue={undefined}
+                platformKey="google"
+                expandedCampaignId={expandedCampaignId}
+                onToggleExpand={toggleCampaignExpand}
               />
             </div>
           </div>
+          )}
 
           {/* ── Facebook Ads Table ── */}
+          {facebookCampaigns.length > 0 && (
           <div className="bg-white rounded-xl border border-slate-200 shadow overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-50">
               <div className="flex items-center justify-between">
@@ -1107,11 +1245,16 @@ export default function DealersPage() {
                 reachValue={isSingleDay ? reachByPlatform.facebook : undefined}
                 liveReach={(selectedDealerId && isSingleDay) ? undefined : tableReach.facebook.value}
                 reachLoading={(selectedDealerId && isSingleDay) ? false : tableReach.facebook.loading}
+                platformKey="facebook"
+                expandedCampaignId={expandedCampaignId}
+                onToggleExpand={toggleCampaignExpand}
               />
             </div>
           </div>
+          )}
 
           {/* ── Instagram Ads Table ── */}
+          {instagramCampaigns.length > 0 && (
           <div className="bg-white rounded-xl border border-slate-200 shadow overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-50">
               <div className="flex items-center justify-between">
@@ -1136,9 +1279,13 @@ export default function DealersPage() {
                 reachValue={isSingleDay ? reachByPlatform.instagram : undefined}
                 liveReach={(selectedDealerId && isSingleDay) ? undefined : tableReach.instagram.value}
                 reachLoading={(selectedDealerId && isSingleDay) ? false : tableReach.instagram.loading}
+                platformKey="instagram"
+                expandedCampaignId={expandedCampaignId}
+                onToggleExpand={toggleCampaignExpand}
               />
             </div>
           </div>
+          )}
 
           {/* ── Conversions Section ── */}
           <div className="bg-white rounded-xl border border-slate-200 shadow p-6">
