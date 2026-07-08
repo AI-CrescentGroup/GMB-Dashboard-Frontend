@@ -854,6 +854,22 @@ export default function DealersPage() {
     return { received, answered, missed, dialled }
   }, [callMetrics])
 
+  // call_metrics is one row per dealer per month. In any multi-dealer scope
+  // (all dealers, or a branch_head's assigned subset) callMetrics holds many
+  // rows per month, so the Call Summary table must sum every dealer's row
+  // for that month, not just grab a single one.
+  const callSummaryByMonth = useMemo(() => {
+    const map: Record<string, { received: number; answered: number; missed: number; dialled: number }> = {}
+    callMetrics.forEach((r: any) => {
+      if (!map[r.month]) map[r.month] = { received: 0, answered: 0, missed: 0, dialled: 0 }
+      map[r.month].received += r.calls_received || 0
+      map[r.month].answered += r.calls_answered || 0
+      map[r.month].missed += r.calls_missed || 0
+      map[r.month].dialled += r.calls_dialled || 0
+    })
+    return map
+  }, [callMetrics])
+
   const googleBudget = useMemo(() =>
     budgets
       .filter((b: any) => b.platform === 'google')
@@ -1431,24 +1447,24 @@ export default function DealersPage() {
                     </thead>
                     <tbody>
                       {callSummaryMonths.map((m) => {
-                        const row = callMetrics.find((r: any) => r.month === m.value)
-                        const pct = row && row.calls_received > 0
-                          ? Math.round((row.calls_answered / row.calls_received) * 100)
+                        const row = callSummaryByMonth[m.value]
+                        const pct = row && row.received > 0
+                          ? Math.round((row.answered / row.received) * 100)
                           : 0
                         return (
                           <tr key={m.value} className="border-b border-slate-50">
                             <td className="px-3 py-2 text-center text-slate-700">{m.label}</td>
                             <td className="px-3 py-2 text-center text-slate-700">
-                              {row ? formatNumber(row.calls_received) : '—'}
+                              {row ? formatNumber(row.received) : '—'}
                             </td>
                             <td className="px-3 py-2 text-center text-slate-700">
-                              {row ? formatNumber(row.calls_answered) : '—'}
+                              {row ? formatNumber(row.answered) : '—'}
                             </td>
                             <td className="px-3 py-2 text-center text-slate-700">
-                              {row ? formatNumber(row.calls_missed) : '—'}
+                              {row ? formatNumber(row.missed) : '—'}
                             </td>
                             <td className="px-3 py-2 text-center text-slate-700">
-                              {row ? formatNumber(row.calls_dialled) : '—'}
+                              {row ? formatNumber(row.dialled) : '—'}
                             </td>
                             <td className="px-3 py-2 text-center">
                               <div className="flex items-center justify-center gap-2 min-w-[100px]">
@@ -1459,7 +1475,7 @@ export default function DealersPage() {
                                   />
                                 </div>
                                 <span className="text-xs text-slate-500 w-8">
-                                  {row && row.calls_received > 0 ? `${pct}%` : '—'}
+                                  {row && row.received > 0 ? `${pct}%` : '—'}
                                 </span>
                               </div>
                             </td>
