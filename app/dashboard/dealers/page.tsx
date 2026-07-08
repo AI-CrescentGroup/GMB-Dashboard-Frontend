@@ -507,7 +507,7 @@ function CreativeCarousel({
   creatives: any[]
   index: number
   onIndexChange: (newIndex: number) => void
-  onImageClick: (url: string) => void
+  onImageClick: () => void
   showTypeTag: boolean
 }) {
   if (creatives.length === 0) return null
@@ -528,7 +528,7 @@ function CreativeCarousel({
             src={current.storage_url}
             alt={current.headline || current.ad_name || 'creative'}
             className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-            onClick={() => onImageClick(current.storage_url)}
+            onClick={onImageClick}
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
           {canPrev && (
@@ -585,7 +585,7 @@ export default function DealersPage() {
   const [budgets, setBudgets] = useState<any[]>([])
   const [creativesData, setCreativesData] = useState<{ google: any[]; facebook: any[]; instagram: any[] }>({ google: [], facebook: [], instagram: [] })
   const [creativesLoading, setCreativesLoading] = useState(false)
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightboxPlatform, setLightboxPlatform] = useState<'google' | 'facebook' | 'instagram' | null>(null)
   const [carouselIndex, setCarouselIndex] = useState<{ google: number; facebook: number; instagram: number }>({ google: 0, facebook: 0, instagram: 0 })
   const [showGlossary, setShowGlossary] = useState(false)
   const [allTimeMetrics, setAllTimeMetrics] = useState<any[]>([])
@@ -967,6 +967,36 @@ export default function DealersPage() {
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }
+
+  // ── Ad creative download ─────────────────────────────────────────────────────
+  // Fetch + blob forces a real download regardless of the storage host's CORS
+  // policy (confirmed live: Supabase Storage sends permissive CORS headers,
+  // so this path works). Falls back to opening the image in a new tab if the
+  // fetch itself is blocked, so the user can still save it manually.
+  async function handleDownloadCreative(url: string) {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = url.split('/').pop() || 'creative.jpg'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
+    } catch (e) {
+      console.error('creative download failed, opening in new tab instead:', e)
+      window.open(url, '_blank')
+    }
+  }
+
+  // Lightbox derived state — platform + shared carouselIndex are the single
+  // source of truth, so the lightbox and small carousel can never drift apart.
+  const lightboxCreatives = lightboxPlatform ? creativesData[lightboxPlatform] : []
+  const lightboxIndex = lightboxPlatform ? carouselIndex[lightboxPlatform] : 0
+  const lightboxCreative = lightboxCreatives[lightboxIndex] ?? null
 
   // ── JSX ──────────────────────────────────────────────────────────────────────
 
@@ -1464,7 +1494,7 @@ export default function DealersPage() {
           creatives={creativesData.google}
           index={carouselIndex.google}
           onIndexChange={(newIndex) => setCarouselIndex(prev => ({ ...prev, google: newIndex }))}
-          onImageClick={setLightboxUrl}
+          onImageClick={() => setLightboxPlatform('google')}
           showTypeTag={true}
         />
         <CreativeCarousel
@@ -1474,7 +1504,7 @@ export default function DealersPage() {
           creatives={creativesData.facebook}
           index={carouselIndex.facebook}
           onIndexChange={(newIndex) => setCarouselIndex(prev => ({ ...prev, facebook: newIndex }))}
-          onImageClick={setLightboxUrl}
+          onImageClick={() => setLightboxPlatform('facebook')}
           showTypeTag={false}
         />
         <CreativeCarousel
@@ -1484,7 +1514,7 @@ export default function DealersPage() {
           creatives={creativesData.instagram}
           index={carouselIndex.instagram}
           onIndexChange={(newIndex) => setCarouselIndex(prev => ({ ...prev, instagram: newIndex }))}
-          onImageClick={setLightboxUrl}
+          onImageClick={() => setLightboxPlatform('instagram')}
           showTypeTag={false}
         />
       </div>
@@ -1519,25 +1549,47 @@ export default function DealersPage() {
         </Modal>
       )}
 
-      {lightboxUrl && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
-          onClick={() => setLightboxUrl(null)}
-        >
-          <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={e => e.stopPropagation()}>
+      {lightboxPlatform && lightboxCreative && (
+        <Modal onClose={() => setLightboxPlatform(null)}>
+          <div className="absolute -top-10 right-0 flex items-center gap-4">
             <button
-              onClick={() => setLightboxUrl(null)}
-              className="absolute -top-10 right-0 text-white text-sm hover:text-slate-300"
+              onClick={() => handleDownloadCreative(lightboxCreative.storage_url)}
+              className="flex items-center gap-1.5 text-white text-sm hover:text-slate-300"
+            >
+              <Download size={15} />
+              Download
+            </button>
+            <button
+              onClick={() => setLightboxPlatform(null)}
+              className="text-white text-sm hover:text-slate-300"
             >
               ✕ Close
             </button>
-            <img
-              src={lightboxUrl}
-              alt="Creative preview"
-              className="w-full h-full object-contain rounded-lg max-h-[85vh]"
-            />
           </div>
-        </div>
+          {lightboxIndex > 0 && (
+            <button
+              onClick={() => setCarouselIndex(prev => ({ ...prev, [lightboxPlatform]: lightboxIndex - 1 }))}
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-slate-700 hover:bg-white transition-colors"
+              aria-label="Previous creative (lightbox)"
+            >
+              ‹
+            </button>
+          )}
+          {lightboxIndex < lightboxCreatives.length - 1 && (
+            <button
+              onClick={() => setCarouselIndex(prev => ({ ...prev, [lightboxPlatform]: lightboxIndex + 1 }))}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-slate-700 hover:bg-white transition-colors"
+              aria-label="Next creative (lightbox)"
+            >
+              ›
+            </button>
+          )}
+          <img
+            src={lightboxCreative.storage_url}
+            alt="Creative preview"
+            className="w-full h-full object-contain rounded-lg max-h-[85vh]"
+          />
+        </Modal>
       )}
     </div>
   )
