@@ -7,7 +7,7 @@ import { exportDealerPPT } from '@/lib/exportPPT'
 import { Select } from '@/components/ui/select'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
 import {
-  Download, Navigation, MapPin, Phone, Eye, Zap, TrendingUp, Activity, Camera,
+  Download, Navigation, MapPin, Phone, Eye, Zap, TrendingUp, Activity, Camera, HelpCircle, X,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -179,6 +179,57 @@ function KpiCard({
     </div>
   )
 }
+
+// ─── Shared modal shell (backdrop + outside-click-to-close) ───────────────────
+// Callers own their own header/close-button styling — this only owns the
+// overlay, centering, and click-outside behavior so it isn't duplicated
+// between the KPI glossary and the ad creatives lightbox.
+
+function Modal({
+  onClose,
+  children,
+  maxWidthClass = 'max-w-4xl',
+}: {
+  onClose: () => void
+  children: ReactNode
+  maxWidthClass?: string
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className={`relative ${maxWidthClass} max-h-[90vh] w-full`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// ─── KPI glossary content ──────────────────────────────────────────────────────
+
+const KPI_GLOSSARY: { label: string; definition: string }[] = [
+  { label: 'Total Spend', definition: 'Total amount spent across Google, Facebook, and Instagram ads for the selected period.' },
+  { label: 'Impressions', definition: 'Number of times your ads were displayed to users, across all platforms.' },
+  { label: 'Reach', definition: 'Number of unique people who saw your Facebook or Instagram ads at least once (Meta platforms only — Google does not report reach).' },
+  { label: 'Link Clicks', definition: 'Number of times users clicked through from an ad to your website or landing page.' },
+  { label: 'CTR % (Click-Through Rate)', definition: 'Share of impressions that resulted in a click — link clicks divided by impressions.' },
+  { label: 'CPC ₹ (Cost Per Click)', definition: 'Average amount spent per click on Google Ads — spend divided by link clicks.' },
+  { label: 'CPM ₹ (Cost Per Mille)', definition: 'Average cost per 1,000 impressions on Facebook/Instagram ads — spend divided by impressions, ×1,000.' },
+  { label: 'Website Visits', definition: 'Number of sessions on your website, tracked via Google Analytics (GA4).' },
+  { label: 'Call Clicks', definition: 'Number of times a user tapped a tracked call button or phone number on your website.' },
+  { label: 'Download Catalogue', definition: 'Number of times users downloaded a product catalogue from your website.' },
+  { label: 'Drive Direction', definition: 'Number of times users requested directions from your website (GA4-tracked — distinct from the "Driving Directions" metric below, which comes from your Google Business Profile).' },
+  { label: 'Enquiry Track', definition: 'Number of enquiry or contact-form interactions tracked on your website.' },
+  { label: 'Form Submit', definition: 'Number of times users submitted a form on your website.' },
+  { label: 'Driving Directions', definition: 'Number of times users requested directions to your store from your Google Business Profile listing.' },
+  { label: 'Store Visits', definition: 'Number of visits to your physical store attributed to your Google Business Profile listing.' },
+  { label: 'Calls', definition: 'Total phone calls received on your tracked number, broken down into Answered, Missed, and Dialled (attempted).' },
+  { label: 'Budget', definition: 'The planned ad spend allocated to a campaign or platform for the selected period.' },
+]
 
 // ─── Table style constants ────────────────────────────────────────────────────
 
@@ -536,6 +587,7 @@ export default function DealersPage() {
   const [creativesLoading, setCreativesLoading] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [carouselIndex, setCarouselIndex] = useState<{ google: number; facebook: number; instagram: number }>({ google: 0, facebook: 0, instagram: 0 })
+  const [showGlossary, setShowGlossary] = useState(false)
   const [allTimeMetrics, setAllTimeMetrics] = useState<any[]>([])
   const [allTimeCalls, setAllTimeCalls] = useState<any[]>([])
 
@@ -923,7 +975,17 @@ export default function DealersPage() {
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between pb-2 border-b border-slate-200 mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Marketing Campaign Reports</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold text-slate-900">Marketing Campaign Reports</h1>
+          <button
+            onClick={() => setShowGlossary(true)}
+            className="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+            title="What do these metrics mean?"
+            aria-label="Open KPI glossary"
+          >
+            <HelpCircle size={18} />
+          </button>
+        </div>
         <span className="text-xs text-slate-400">Updated till: {latestDate}</span>
       </div>
 
@@ -1430,6 +1492,31 @@ export default function DealersPage() {
   </div>
 )}
         </div>
+      )}
+
+      {showGlossary && (
+        <Modal onClose={() => setShowGlossary(false)} maxWidthClass="max-w-2xl">
+          <div className="bg-white rounded-xl shadow-xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h2 className="text-base font-semibold text-slate-900">KPI Glossary</h2>
+              <button
+                onClick={() => setShowGlossary(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                aria-label="Close glossary"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto space-y-4">
+              {KPI_GLOSSARY.map(({ label, definition }) => (
+                <div key={label}>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600">{label}</div>
+                  <div className="text-sm text-slate-600 mt-0.5">{definition}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Modal>
       )}
 
       {lightboxUrl && (
