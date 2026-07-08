@@ -173,7 +173,7 @@ function KpiCard({
         {icon}
         <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">{label}</span>
       </div>
-      <div className={`text-2xl font-bold ${note ? 'text-slate-400' : 'text-slate-900'}`}>{value}</div>
+      <div className="text-2xl font-bold text-slate-900">{value}</div>
       {subtitle && <div className="text-xs text-slate-400 mt-1">{subtitle}</div>}
       {note && <div className="text-xs text-slate-400 mt-1">{note}</div>}
     </div>
@@ -341,10 +341,10 @@ function CampaignTable({
     if (liveReach !== undefined) {
       return liveReach === null
         ? <span className="text-slate-400">—</span>
-        : <span className="text-slate-700 font-medium">{formatNumber(liveReach)}</span>
+        : <span className="text-slate-700 font-medium">{formatMillions(liveReach)}</span>
     }
     return reachValue && reachValue > 0 ? (
-      <span className="text-slate-700 font-medium">{formatNumber(reachValue)}</span>
+      <span className="text-slate-700 font-medium">{formatMillions(reachValue)}</span>
     ) : (
       <span className="text-slate-400">—*</span>
     )
@@ -1040,14 +1040,14 @@ export default function DealersPage() {
               value={
                 allTimeReachLoading ? '…'
                 : allTimeReachData?.reach == null ? '—'
-                : formatNumber(allTimeReachData.reach)
+                : formatMillions(allTimeReachData.reach)
               }
               note={
-                allTimeReachLoading ? 'All Meta campaigns · full period'
+                allTimeReachLoading ? undefined
                 : allTimeReachData?.reach == null ? 'Reach unavailable'
                 : allTimeReachData.dealers_covered < allTimeReachData.dealers_requested
-                  ? `All Meta campaigns · full period · ${allTimeReachData.dealers_covered}/${allTimeReachData.dealers_requested} dealers`
-                  : 'All Meta campaigns · full period'
+                  ? `${allTimeReachData.dealers_covered}/${allTimeReachData.dealers_requested} dealers`
+                  : undefined
               }
               title={!allTimeReachLoading && allTimeReachData?.reach == null ? 'Reach unavailable — check connection' : undefined}
             />
@@ -1215,7 +1215,7 @@ export default function DealersPage() {
               value={
                 reachLoading ? '…'
                 : reachData?.reach == null ? '—'
-                : formatNumber(reachData.reach)
+                : formatMillions(reachData.reach)
               }
               note={
                 reachLoading ? undefined
