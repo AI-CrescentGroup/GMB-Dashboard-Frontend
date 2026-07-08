@@ -59,28 +59,26 @@ export default function Header({ role }: { role?: string }) {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
       <div
-        className="w-full px-8 h-16"
-        style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center' }}
+        className="w-full px-4 sm:px-8 h-16"
+        style={{ display: 'grid', gridTemplateColumns: 'minmax(44px, 1fr) minmax(0, auto) minmax(96px, 1fr)', alignItems: 'center' }}
       >
         {/* Left: Brand */}
-        <div className="flex items-center gap-2.5" style={{ justifySelf: 'start' }}>
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0" style={{ justifySelf: 'start' }}>
           <div className="h-7 w-7 rounded-md bg-indigo-600 flex items-center justify-center flex-shrink-0" />
-          <div>
-            <span className="text-[15px] font-semibold tracking-tight text-slate-900">
-              Jaquar <span className="text-slate-400 font-normal">GMB</span>
-            </span>
-          </div>
+          <span className="text-[15px] font-semibold tracking-tight text-slate-900 truncate">
+            Jaquar <span className="hidden sm:inline text-slate-400 font-normal">GMB</span>
+          </span>
         </div>
 
         {/* Center: Pill Nav */}
-        <nav className="flex items-center gap-1 bg-slate-100 rounded-full p-1">
+        <nav className="flex items-center gap-1 bg-slate-100 rounded-full p-1 max-w-full overflow-x-auto">
           {navItems.map((item) => {
             const isActive = pathname === item.href
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`px-6 py-1.5 rounded-full text-[13px] font-medium transition whitespace-nowrap ${
+                className={`px-3 sm:px-6 py-1.5 rounded-full text-[12px] sm:text-[13px] font-medium transition whitespace-nowrap ${
                   isActive
                     ? 'bg-indigo-600 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
                     : 'text-slate-600 hover:text-slate-900'
@@ -95,9 +93,9 @@ export default function Header({ role }: { role?: string }) {
         </nav>
 
         {/* Right: User + Logout */}
-        <div className="flex items-center justify-end gap-3" style={{ justifySelf: 'end' }}>
+        <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0" style={{ justifySelf: 'end' }}>
           {user && (
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
               <div className="hidden sm:block text-right">
                 <div className="text-[13px] font-medium leading-tight text-slate-900">{user.username}</div>
               </div>
@@ -106,10 +104,10 @@ export default function Header({ role }: { role?: string }) {
               </div>
             </div>
           )}
-          <div className="h-5 w-px bg-slate-200" />
+          <div className="h-5 w-px bg-slate-200 flex-shrink-0" />
           <button
             onClick={handleLogout}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition flex-shrink-0"
             title="Logout"
           >
             <LogOut size={16} />

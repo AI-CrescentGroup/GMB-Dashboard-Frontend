@@ -769,15 +769,15 @@ export default function OverviewPage() {
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5">{kpiLabel}</div>
                   </div>
-                  <div className="flex-1">
-                    <ResponsiveContainer width="100%" height={260}>
+                  <div className="flex-1 aspect-square max-w-[260px] min-h-[170px]">
+                    <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
                           data={zonePieData}
                           cx="50%"
                           cy="45%"
-                          innerRadius={60}
-                          outerRadius={100}
+                          innerRadius="48%"
+                          outerRadius="80%"
                           paddingAngle={2}
                           dataKey="value"
                         >
@@ -813,15 +813,15 @@ export default function OverviewPage() {
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5">{kpiLabel}</div>
                   </div>
-                  <div className="flex-1">
-                    <ResponsiveContainer width="100%" height={260}>
+                  <div className="flex-1 aspect-square max-w-[260px] min-h-[170px]">
+                    <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
                           data={tierPieData}
                           cx="50%"
                           cy="45%"
-                          innerRadius={60}
-                          outerRadius={100}
+                          innerRadius="48%"
+                          outerRadius="80%"
                           paddingAngle={2}
                           dataKey="value"
                         >

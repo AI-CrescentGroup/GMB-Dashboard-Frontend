@@ -254,72 +254,84 @@ function CampaignTable({
   }
 
   return (
-    <table className="w-full table-fixed text-sm">
+    <table className="w-full text-sm" style={{ tableLayout: 'fixed', minWidth: '1080px' }}>
+      <colgroup>
+        <col style={{ width: '260px' }} />
+        <col style={{ width: '80px' }} />
+        <col style={{ width: '110px' }} />
+        <col style={{ width: '90px' }} />
+        <col style={{ width: '90px' }} />
+        <col style={{ width: '100px' }} />
+        <col style={{ width: '80px' }} />
+        <col style={{ width: '80px' }} />
+        <col style={{ width: '90px' }} />
+        <col style={{ width: '100px' }} />
+      </colgroup>
       <thead>
         <tr className="bg-slate-50">
-          <th className={`${TH} text-center w-[28%]`}>Campaign Name</th>
-          <th className={`${TH} text-center w-[7%]`}>Status</th>
-          <th className={`${TH} text-center w-[10%]`}>Period</th>
-          <th className={`${TH} text-center w-[7%]`}>Budget</th>
-          <th className={`${TH} text-center w-[8%]`}>Link Clicks</th>
-          <th className={`${TH} text-center w-[9%]`}>Impressions</th>
-          <th className={`${TH} text-center w-[7%]`}>
+          <th className={`${TH} text-center`}>Campaign Name</th>
+          <th className={`${TH} text-center`}>Status</th>
+          <th className={`${TH} text-center`}>Period</th>
+          <th className={`${TH} text-center`}>Budget</th>
+          <th className={`${TH} text-center`}>Link Clicks</th>
+          <th className={`${TH} text-center`}>Impressions</th>
+          <th className={`${TH} text-center`}>
             {showReachLabel !== false ? 'Reach' : ''}
           </th>
-          <th className={`${TH} text-center w-[7%]`}>CTR %</th>
-          <th className={`${TH} text-center w-[8%]`}>{showCpm ? 'CPM ₹' : 'CPC ₹'}</th>
-          <th className={`${TH} text-center w-[9%]`}>Spend ₹</th>
+          <th className={`${TH} text-center`}>CTR %</th>
+          <th className={`${TH} text-center`}>{showCpm ? 'CPM ₹' : 'CPC ₹'}</th>
+          <th className={`${TH} text-center`}>Spend ₹</th>
         </tr>
       </thead>
       <tbody>
         {isAllDealers ? (
           // All Dealers mode: single aggregated summary row
           <tr className="hover:bg-slate-50 transition-colors">
-            <td className={`${TD} text-center w-[28%]`}>
+            <td className={`${TD} text-center`}>
               <span className="text-slate-500 italic">{campaignCount} campaigns</span>
             </td>
-            <td className={`${TD} text-center w-[7%]`}><span className="text-slate-400">—</span></td>
-            <td className={`${TD} text-center w-[10%]`}><span className="text-slate-400">—</span></td>
-            <td className={`${TD} text-center w-[7%]`}>
+            <td className={`${TD} text-center`}><span className="text-slate-400">—</span></td>
+            <td className={`${TD} text-center`}><span className="text-slate-400">—</span></td>
+            <td className={`${TD} text-center`}>
               {budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
             </td>
-            <td className={`${TD} text-center w-[8%]`}>{formatMillions(totalClicks)}</td>
-            <td className={`${TD} text-center w-[9%]`}>{formatMillions(totalImpressions)}</td>
-            <td className={`${TD} text-center w-[7%]`} title={reachCellTitle()}>
+            <td className={`${TD} text-center`}>{formatMillions(totalClicks)}</td>
+            <td className={`${TD} text-center`}>{formatMillions(totalImpressions)}</td>
+            <td className={`${TD} text-center`} title={reachCellTitle()}>
               {renderReachCell()}
             </td>
-            <td className={`${TD} text-center w-[7%]`}>{summaryCtr}%</td>
-            <td className={`${TD} text-center w-[8%]`}>₹{showCpm ? summaryCpm : summaryCpc}</td>
-            <td className={`${TD} text-center w-[9%]`}>{formatCurrency(totalSpend)}</td>
+            <td className={`${TD} text-center`}>{summaryCtr}%</td>
+            <td className={`${TD} text-center`}>₹{showCpm ? summaryCpm : summaryCpc}</td>
+            <td className={`${TD} text-center`}>{formatCurrency(totalSpend)}</td>
           </tr>
         ) : (
           // Single dealer mode: one row per campaign
           campaigns.map((c, i) => (
             <tr key={i} className="hover:bg-slate-50 transition-colors">
-              <td className={`${TD} text-center font-medium text-slate-900 w-[28%] truncate max-w-0`}>
+              <td className={`${TD} text-center font-medium text-slate-900 truncate max-w-0`}>
                 <span className="block truncate" title={c.name}>{c.name}</span>
               </td>
-              <td className={`${TD} text-center w-[7%]`}>
+              <td className={`${TD} text-center`}>
                 <StatusBadge status={dealerStatus} />
               </td>
-              <td className={`${TD} text-center w-[10%]`}>
+              <td className={`${TD} text-center`}>
                 {c.startDate && c.endDate ? (
                   <span className="text-slate-700 text-xs">{formatPeriod(c.startDate, c.endDate)}</span>
                 ) : (
                   <span className="text-slate-400">—</span>
                 )}
               </td>
-              <td className={`${TD} text-center w-[7%]`}>
+              <td className={`${TD} text-center`}>
                 {budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
               </td>
-              <td className={`${TD} text-center w-[8%]`}>{formatNumber(c.clicks)}</td>
-              <td className={`${TD} text-center w-[9%]`}>{formatMillions(c.impressions)}</td>
-              <td className={`${TD} text-center w-[7%]`} title={reachCellTitle()}>
+              <td className={`${TD} text-center`}>{formatNumber(c.clicks)}</td>
+              <td className={`${TD} text-center`}>{formatMillions(c.impressions)}</td>
+              <td className={`${TD} text-center`} title={reachCellTitle()}>
                 {renderReachCell()}
               </td>
-              <td className={`${TD} text-center w-[7%]`}>{c.ctr}%</td>
-              <td className={`${TD} text-center w-[8%]`}>₹{showCpm ? c.cpm : c.cpc}</td>
-              <td className={`${TD} text-center w-[9%]`}>{formatCurrency(c.spend)}</td>
+              <td className={`${TD} text-center`}>{c.ctr}%</td>
+              <td className={`${TD} text-center`}>₹{showCpm ? c.cpm : c.cpc}</td>
+              <td className={`${TD} text-center`}>{formatCurrency(c.spend)}</td>
             </tr>
           ))
         )}
@@ -1199,15 +1211,23 @@ export default function DealersPage() {
               <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4">
                 <h3 className="text-sm font-semibold text-slate-800">Call Summary</h3>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm table-fixed">
+                  <table className="w-full text-sm" style={{ tableLayout: 'fixed', minWidth: '700px' }}>
+                    <colgroup>
+                      <col style={{ width: '90px' }} />
+                      <col style={{ width: '130px' }} />
+                      <col style={{ width: '120px' }} />
+                      <col style={{ width: '100px' }} />
+                      <col style={{ width: '100px' }} />
+                      <col style={{ width: '160px' }} />
+                    </colgroup>
                     <thead>
                       <tr className="bg-slate-50">
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[15%]">Month</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[17%]">Calls Received</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[16%]">Answered</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[14%]">Missed</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[14%]">Dialled</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap w-[24%]">Answered %</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Month</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Calls Received</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Answered</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Missed</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Dialled</th>
+                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Answered %</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1218,20 +1238,20 @@ export default function DealersPage() {
                           : 0
                         return (
                           <tr key={m.value} className="border-b border-slate-50">
-                            <td className="px-3 py-2 text-center text-slate-700 w-[15%]">{m.label}</td>
-                            <td className="px-3 py-2 text-center text-slate-700 w-[17%]">
+                            <td className="px-3 py-2 text-center text-slate-700">{m.label}</td>
+                            <td className="px-3 py-2 text-center text-slate-700">
                               {row ? formatNumber(row.calls_received) : '—'}
                             </td>
-                            <td className="px-3 py-2 text-center text-slate-700 w-[16%]">
+                            <td className="px-3 py-2 text-center text-slate-700">
                               {row ? formatNumber(row.calls_answered) : '—'}
                             </td>
-                            <td className="px-3 py-2 text-center text-slate-700 w-[14%]">
+                            <td className="px-3 py-2 text-center text-slate-700">
                               {row ? formatNumber(row.calls_missed) : '—'}
                             </td>
-                            <td className="px-3 py-2 text-center text-slate-700 w-[14%]">
+                            <td className="px-3 py-2 text-center text-slate-700">
                               {row ? formatNumber(row.calls_dialled) : '—'}
                             </td>
-                            <td className="px-3 py-2 text-center w-[24%]">
+                            <td className="px-3 py-2 text-center">
                               <div className="flex items-center justify-center gap-2 min-w-[100px]">
                                 <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
                                   <div
