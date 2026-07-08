@@ -1025,11 +1025,12 @@ export default function DealersPage() {
           <h1 className="text-2xl font-semibold text-slate-900">Marketing Campaign Reports</h1>
           <button
             onClick={() => setShowGlossary(true)}
-            className="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+            className="flex items-center gap-1.5 pl-2.5 pr-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 transition text-xs font-medium whitespace-nowrap"
             title="What do these metrics mean?"
             aria-label="Open KPI glossary"
           >
-            <HelpCircle size={18} />
+            <HelpCircle size={14} />
+            How to read this report
           </button>
         </div>
         <span className="text-xs text-slate-400">Updated till: {latestDate}</span>
