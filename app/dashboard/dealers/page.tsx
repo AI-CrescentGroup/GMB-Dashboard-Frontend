@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
-import { getDealers, getMetrics, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives, getReach } from '@/lib/queries'
+import { getDealers, getMetrics, getMetricsSummary, getCampaignSummary, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives, getReach } from '@/lib/queries'
 import { exportDealerPPT } from '@/lib/exportPPT'
 import { Select } from '@/components/ui/select'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
@@ -117,6 +117,23 @@ function groupCampaigns(rows: any[]) {
     cpc: c.clicks > 0 ? (c.spend / c.clicks).toFixed(2) : '0.00',
     cpm: c.impressions > 0 ? ((c.spend / c.impressions) * 1000).toFixed(2) : '0.00',
   }))
+}
+
+// Derive the KPI-strip totals from get_metrics_summary rows (one row per platform).
+// Mirrors the original raw-row logic exactly: spend summed across ALL platforms;
+// impressions/clicks only from google/facebook/instagram; website visits only from ga4.
+// Number() coercion is required because PostgREST serializes numeric (spend) as a string.
+function kpiFromSummary(rows: any[]) {
+  let totalSpend = 0, totalImpressions = 0, totalClicks = 0, websiteVisits = 0
+  rows.forEach((r: any) => {
+    totalSpend += Number(r.total_spend_inr) || 0
+    if (r.platform === 'google' || r.platform === 'facebook' || r.platform === 'instagram') {
+      totalImpressions += Number(r.total_impressions) || 0
+      totalClicks += Number(r.total_link_clicks) || 0
+    }
+    if (r.platform === 'ga4') websiteVisits += Number(r.total_website_visits) || 0
+  })
+  return { totalSpend, totalImpressions, totalClicks, websiteVisits }
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -574,7 +591,15 @@ export default function DealersPage() {
   const [role, setRole] = useState('')
   const [dealers, setDealers] = useState<any[]>([])
   const [selectedDealerId, setSelectedDealerId] = useState('')
-  const [displayMetrics, setDisplayMetrics] = useState<any[]>([])
+  // Server-aggregated sources (replace the old raw full-table fetch):
+  //   summaryRows  — one row per platform (get_metrics_summary) → KPI strip + conversions
+  //   campaignRows — one row per (campaign_name, platform) (get_campaign_summary) → 3 ad tables
+  //   singleDayRows — raw fb/ig rows, lazily fetched ONLY when a single day is selected,
+  //                   the one case reachByPlatform needs row-level reach.
+  const [summaryRows, setSummaryRows] = useState<any[]>([])
+  const [campaignRows, setCampaignRows] = useState<any[]>([])
+  const [singleDayRows, setSingleDayRows] = useState<any[]>([])
+  const [pptLoading, setPptLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'monthly' | 'daterange'>('monthly')
   const [selectedMonth, setSelectedMonth] = useState('all')
@@ -588,7 +613,7 @@ export default function DealersPage() {
   const [lightboxPlatform, setLightboxPlatform] = useState<'google' | 'facebook' | 'instagram' | null>(null)
   const [carouselIndex, setCarouselIndex] = useState<{ google: number; facebook: number; instagram: number }>({ google: 0, facebook: 0, instagram: 0 })
   const [showGlossary, setShowGlossary] = useState(false)
-  const [allTimeMetrics, setAllTimeMetrics] = useState<any[]>([])
+  const [allTimeSummary, setAllTimeSummary] = useState<any[]>([])
   const [allTimeCalls, setAllTimeCalls] = useState<any[]>([])
 
   // Live Meta reach — admin filtered KPI card
@@ -627,7 +652,10 @@ export default function DealersPage() {
     getLatestMetricDate().then(setLatestDate).catch(() => {})
   }, [])
 
-  // Load metrics whenever filters change
+  // Load aggregated metrics whenever filters change. Server-side aggregation via two
+  // RPCs replaces the old raw ~162k-row paginated fetch: get_metrics_summary (platform
+  // grain, for the KPI strip + conversions) and get_campaign_summary (campaign grain,
+  // for the 3 ad tables). Fired in parallel — neither depends on the other.
   useEffect(() => {
     if (dealers.length === 0) return
     let cancelled = false
@@ -637,8 +665,14 @@ export default function DealersPage() {
       try {
         const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
         const ids = selectedDealerId ? [selectedDealerId] : dealers.map((d: any) => d.id)
-        const data = await getMetrics(ids, from, to, [])
-        if (!cancelled) setDisplayMetrics(data)
+        const [summary, campaigns] = await Promise.all([
+          getMetricsSummary(ids, from, to, []),
+          getCampaignSummary(ids, from, to),
+        ])
+        if (!cancelled) {
+          setSummaryRows(summary)
+          setCampaignRows(campaigns)
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -665,8 +699,8 @@ export default function DealersPage() {
     if (!isRestrictedRole || dealers.length === 0) return
     let cancelled = false
     const ids = dealers.map((d: any) => d.id)
-    getMetrics(ids, ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO, []).then((data) => {
-      if (!cancelled) setAllTimeMetrics(data)
+    getMetricsSummary(ids, ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO, []).then((data) => {
+      if (!cancelled) setAllTimeSummary(data)
     })
     getCallMetrics(ids, '2025-05', '2026-03').then((data) => {
       if (!cancelled) setAllTimeCalls(data)
@@ -717,16 +751,36 @@ export default function DealersPage() {
     return from === to
   }, [viewMode, selectedMonth, dateFrom, dateTo])
 
+  // Single-day-only Rule B reach: row-level daily_metrics.reach for a single dealer on a
+  // single day. summaryRows/campaignRows carry no reach column, so this reads the lazily
+  // fetched singleDayRows (populated only when isSingleDay — see the effect below).
   const reachByPlatform = useMemo(() => {
     if (!isSingleDay) return { facebook: 0, instagram: 0 }
     let facebook = 0
     let instagram = 0
-    displayMetrics.forEach((m: any) => {
+    singleDayRows.forEach((m: any) => {
       if (m.platform === 'facebook') facebook += m.reach || 0
       if (m.platform === 'instagram') instagram += m.reach || 0
     })
     return { facebook, instagram }
-  }, [displayMetrics, isSingleDay])
+  }, [singleDayRows, isSingleDay])
+
+  // Lazy raw fetch for the single-day reach case ONLY. Never fires on the default
+  // All-Months view (isSingleDay is false whenever from !== to). Scoped to fb/ig — the
+  // only platforms reachByPlatform reads — so it's ~a few hundred rows / one fast page.
+  useEffect(() => {
+    if (!isSingleDay || dealers.length === 0) {
+      setSingleDayRows([])
+      return
+    }
+    let cancelled = false
+    const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
+    const ids = selectedDealerId ? [selectedDealerId] : dealers.map((d: any) => d.id)
+    getMetrics(ids, from, to, ['facebook', 'instagram']).then((data) => {
+      if (!cancelled) setSingleDayRows(data)
+    })
+    return () => { cancelled = true }
+  }, [isSingleDay, dealers, selectedDealerId, viewMode, selectedMonth, dateFrom, dateTo])
 
   // Admin filtered Reach KPI card — ALWAYS a live call (Rule A: combined KPI
   // never uses stored data), scoped to the current filter state.
@@ -780,31 +834,9 @@ export default function DealersPage() {
     return () => { cancelled = true }
   }, [selectedDealerId, isSingleDay, viewMode, selectedMonth, dateFrom, dateTo])
 
-  const kpi = useMemo(() => {
-    let totalSpend = 0, totalImpressions = 0, totalClicks = 0, websiteVisits = 0
-    displayMetrics.forEach((m: any) => {
-      totalSpend += m.spend_inr || 0
-      if (m.platform === 'google' || m.platform === 'facebook' || m.platform === 'instagram') {
-        totalImpressions += m.impressions || 0
-        totalClicks += m.link_clicks || 0
-      }
-      if (m.platform === 'ga4') websiteVisits += m.website_visits || 0
-    })
-    return { totalSpend, totalImpressions, totalClicks, websiteVisits }
-  }, [displayMetrics])
+  const kpi = useMemo(() => kpiFromSummary(summaryRows), [summaryRows])
 
-  const allTimeKpi = useMemo(() => {
-    let totalSpend = 0, totalImpressions = 0, totalClicks = 0, websiteVisits = 0
-    allTimeMetrics.forEach((m: any) => {
-      totalSpend += m.spend_inr || 0
-      if (m.platform === 'google' || m.platform === 'facebook' || m.platform === 'instagram') {
-        totalImpressions += m.impressions || 0
-        totalClicks += m.link_clicks || 0
-      }
-      if (m.platform === 'ga4') websiteVisits += m.website_visits || 0
-    })
-    return { totalSpend, totalImpressions, totalClicks, websiteVisits }
-  }, [allTimeMetrics])
+  const allTimeKpi = useMemo(() => kpiFromSummary(allTimeSummary), [allTimeSummary])
 
   const allTimeCallTotals = useMemo(() => {
     const received = allTimeCalls.reduce((s: number, r: any) => s + (r.calls_received || 0), 0)
@@ -812,39 +844,45 @@ export default function DealersPage() {
     return { received, answered }
   }, [allTimeCalls])
 
+  // campaignRows is already at (campaign_name, platform) grain from get_campaign_summary,
+  // shaped to match what groupCampaigns consumes — so groupCampaigns still owns the
+  // ctr/cpc/cpm math and the tables render unchanged.
   const googleCampaigns = useMemo(
-    () => groupCampaigns(displayMetrics.filter((m: any) => m.platform === 'google')),
-    [displayMetrics]
+    () => groupCampaigns(campaignRows.filter((m: any) => m.platform === 'google')),
+    [campaignRows]
   )
   const facebookCampaigns = useMemo(
-    () => groupCampaigns(displayMetrics.filter((m: any) => m.platform === 'facebook')),
-    [displayMetrics]
+    () => groupCampaigns(campaignRows.filter((m: any) => m.platform === 'facebook')),
+    [campaignRows]
   )
   const instagramCampaigns = useMemo(
-    () => groupCampaigns(displayMetrics.filter((m: any) => m.platform === 'instagram')),
-    [displayMetrics]
+    () => groupCampaigns(campaignRows.filter((m: any) => m.platform === 'instagram')),
+    [campaignRows]
   )
 
+  // Conversions from get_metrics_summary rows (one per platform). Same platform/field
+  // selection as the original raw-row logic: gmb → directions/store visits; ga4 → website
+  // visits + the six event counters. Number() coercion guards PostgREST string serialization.
   const conversions = useMemo(() => {
     let directions = 0, storeVisits = 0, websiteVisits = 0, callNumberTrack = 0, callTrack = 0,
       downloadCatalogue = 0, driveDirection = 0, enquiryTrack = 0, formSubmit = 0
-    displayMetrics.forEach((m: any) => {
-      if (m.platform === 'gmb') {
-        directions += m.driving_directions || 0
-        storeVisits += m.store_visits || 0
+    summaryRows.forEach((r: any) => {
+      if (r.platform === 'gmb') {
+        directions += Number(r.total_driving_directions) || 0
+        storeVisits += Number(r.total_store_visits) || 0
       }
-      if (m.platform === 'ga4') {
-        websiteVisits += m.website_visits || 0
-        callNumberTrack += m.event_call_number_track || 0
-        callTrack += m.event_call_track || 0
-        downloadCatalogue += m.event_download_catalogue || 0
-        driveDirection += m.event_drive_direction || 0
-        enquiryTrack += m.event_enquiry_track || 0
-        formSubmit += m.event_form_submit || 0
+      if (r.platform === 'ga4') {
+        websiteVisits += Number(r.total_website_visits) || 0
+        callNumberTrack += Number(r.total_event_call_number_track) || 0
+        callTrack += Number(r.total_event_call_track) || 0
+        downloadCatalogue += Number(r.total_event_download_catalogue) || 0
+        driveDirection += Number(r.total_event_drive_direction) || 0
+        enquiryTrack += Number(r.total_event_enquiry_track) || 0
+        formSubmit += Number(r.total_event_form_submit) || 0
       }
     })
     return { directions, storeVisits, websiteVisits, callNumberTrack, callTrack, downloadCatalogue, driveDirection, enquiryTrack, formSubmit }
-  }, [displayMetrics])
+  }, [summaryRows])
 
   const callTotals = useMemo(() => {
     const received = callMetrics.reduce((s: number, r: any) => s + (r.calls_received || 0), 0)
@@ -922,15 +960,23 @@ export default function DealersPage() {
       dateRangeText = `${from} to ${to}`
     }
 
+    setPptLoading(true)
+    try {
+    // Raw per-platform rows are needed for the PPT's averaged fields (ctr_percent,
+    // avg_cpc_inr) which the aggregated RPCs don't carry. Fetch them on demand here —
+    // scoped to the single selected dealer, so it's a small, fast query — rather than
+    // holding ~162k rows in memory on every page load just for this button.
+    const rows = await getMetrics([selectedDealerId], from, to, [])
+
     const sum = (arr: any[], key: string) => arr.reduce((s: number, r: any) => s + (r[key] || 0), 0)
     const avgField = (arr: any[], key: string) =>
       arr.length > 0 ? (arr.reduce((s: number, r: any) => s + parseFloat(r[key] || 0), 0) / arr.length).toFixed(2) : '0.00'
 
-    const gRows = displayMetrics.filter((r: any) => r.platform === 'google')
-    const gmbRows = displayMetrics.filter((r: any) => r.platform === 'gmb')
-    const fbRows = displayMetrics.filter((r: any) => r.platform === 'facebook')
-    const igRows = displayMetrics.filter((r: any) => r.platform === 'instagram')
-    const ga4Rows = displayMetrics.filter((r: any) => r.platform === 'ga4')
+    const gRows = rows.filter((r: any) => r.platform === 'google')
+    const gmbRows = rows.filter((r: any) => r.platform === 'gmb')
+    const fbRows = rows.filter((r: any) => r.platform === 'facebook')
+    const igRows = rows.filter((r: any) => r.platform === 'instagram')
+    const ga4Rows = rows.filter((r: any) => r.platform === 'ga4')
 
     const fbSpend = sum(fbRows, 'spend_inr')
     const igSpend = sum(igRows, 'spend_inr')
@@ -982,6 +1028,9 @@ export default function DealersPage() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+    } finally {
+      setPptLoading(false)
+    }
   }
 
   // ── Ad creative download ─────────────────────────────────────────────────────
@@ -1191,10 +1240,11 @@ export default function DealersPage() {
           </label>
           <button
             onClick={handleExportPPT}
-            className="h-9 px-3.5 rounded-lg text-[13px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm"
+            disabled={pptLoading}
+            className="h-9 px-3.5 rounded-lg text-[13px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Download size={15} />
-            Download PPT
+            {pptLoading ? 'Generating…' : 'Download PPT'}
           </button>
         </div>
       </div>

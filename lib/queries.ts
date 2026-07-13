@@ -178,6 +178,50 @@ export async function getMetricsByDealerMonth(
   }))
 }
 
+// Get campaigns pre-aggregated to (campaign_name, platform) grain, summed server-side
+// via Postgres RPC (get_campaign_summary). Restricted to google/facebook/instagram.
+// Returns rows shaped to match what groupCampaigns() consumes (campaign_name, platform,
+// impressions, link_clicks, spend_inr, start_date, end_date) so the Dealers-page campaign
+// tables keep using groupCampaigns unchanged — the ctr/cpc/cpm math stays byte-identical.
+// ~494 rows for all dealers, so a single page covers it, but we paginate defensively:
+// PostgREST silently caps responses at max-rows (1000), and an uncaught cap is exactly the
+// under-count bug that hit the Overview by-dealer RPC. An explicit .order() keeps pages stable.
+export async function getCampaignSummary(
+  dealerIds: string[],
+  dateFrom: string,
+  dateTo: string
+): Promise<any[]> {
+  const params = {
+    p_dealer_ids: toRpcDealerIds(dealerIds),
+    p_date_from: dateFrom || null,
+    p_date_to: dateTo || null,
+  }
+  let all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .rpc('get_campaign_summary', params)
+      .order('platform', { ascending: true })
+      .order('campaign_name', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    all = all.concat(data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return all.map((r: any) => ({
+    campaign_name: r.campaign_name,
+    platform: r.platform,
+    impressions: Number(r.total_impressions) || 0,
+    link_clicks: Number(r.total_link_clicks) || 0,
+    spend_inr: Number(r.total_spend_inr) || 0,
+    start_date: r.start_date,
+    end_date: r.end_date,
+  }))
+}
+
 // Get unique filter options (NO DISTINCT — deduplicate in JS)
 export async function getFilterOptions() {
   const { data: allDealers, error } = await supabase
