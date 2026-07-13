@@ -6,26 +6,12 @@ import { getDealers, getMetrics, getMetricsSummary, getCampaignSummary, getLates
 import { exportDealerPPT } from '@/lib/exportPPT'
 import { Select } from '@/components/ui/select'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
+import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter'
 import {
   Download, Navigation, MapPin, Phone, Eye, Zap, TrendingUp, Activity, Camera, HelpCircle, X,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const MONTH_OPTIONS = [
-  { value: 'all', label: 'All Months' },
-  { value: '2025-05', label: 'May 2025' },
-  { value: '2025-06', label: 'Jun 2025' },
-  { value: '2025-07', label: 'Jul 2025' },
-  { value: '2025-08', label: 'Aug 2025' },
-  { value: '2025-09', label: 'Sep 2025' },
-  { value: '2025-10', label: 'Oct 2025' },
-  { value: '2025-11', label: 'Nov 2025' },
-  { value: '2025-12', label: 'Dec 2025' },
-  { value: '2026-01', label: 'Jan 2026' },
-  { value: '2026-02', label: 'Feb 2026' },
-  { value: '2026-03', label: 'Mar 2026' },
-]
 
 const CALL_MONTHS = [
   { value: '2025-05', label: 'May 2025' },
@@ -71,19 +57,6 @@ function formatPeriod(startDate: string | null, endDate: string | null): string 
     return `${day} ${month}'${year}`
   }
   return `${fmt(startDate)}–${fmt(endDate)}`
-}
-
-function computeDateRange(
-  viewMode: 'monthly' | 'daterange',
-  selectedMonth: string,
-  dateFrom: string,
-  dateTo: string
-): { from: string; to: string } {
-  if (viewMode === 'daterange') return { from: dateFrom, to: dateTo }
-  if (!selectedMonth || selectedMonth === 'all') return { from: '2025-05-28', to: '2026-03-31' }
-  const [year, month] = selectedMonth.split('-')
-  const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate()
-  return { from: `${selectedMonth}-01`, to: `${selectedMonth}-${String(lastDay).padStart(2, '0')}` }
 }
 
 function groupCampaigns(rows: any[]) {
@@ -601,10 +574,8 @@ export default function DealersPage() {
   const [singleDayRows, setSingleDayRows] = useState<any[]>([])
   const [pptLoading, setPptLoading] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<'monthly' | 'daterange'>('monthly')
-  const [selectedMonth, setSelectedMonth] = useState('all')
-  const [dateFrom, setDateFrom] = useState('2025-05-28')
-  const [dateTo, setDateTo] = useState('2026-03-31')
+  // Single date filter driving the whole page — presets + calendar. Default = All time.
+  const [range, setRange] = useState<DateRange>({ from: ALL_TIME_DATE_FROM, to: ALL_TIME_DATE_TO })
   const [latestDate, setLatestDate] = useState('—')
   const [callMetrics, setCallMetrics] = useState<any[]>([])
   const [budgets, setBudgets] = useState<any[]>([])
@@ -657,11 +628,10 @@ export default function DealersPage() {
     async function load() {
       setLoading(true)
       try {
-        const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
         const ids = selectedDealerId ? [selectedDealerId] : dealers.map((d: any) => d.id)
         const [summary, campaigns] = await Promise.all([
-          getMetricsSummary(ids, from, to, []),
-          getCampaignSummary(ids, from, to),
+          getMetricsSummary(ids, range.from, range.to, []),
+          getCampaignSummary(ids, range.from, range.to),
         ])
         if (!cancelled) {
           setSummaryRows(summary)
@@ -674,17 +644,16 @@ export default function DealersPage() {
 
     load()
     return () => { cancelled = true }
-  }, [dealers, selectedDealerId, selectedMonth, dateFrom, dateTo, viewMode])
+  }, [dealers, selectedDealerId, range])
 
   // Load call metrics whenever filters change
   useEffect(() => {
     if (dealers.length === 0) return
-    const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
-    const monthFrom = from.substring(0, 7)
-    const monthTo = to.substring(0, 7)
+    const monthFrom = range.from.substring(0, 7)
+    const monthTo = range.to.substring(0, 7)
     const ids = selectedDealerId ? [selectedDealerId] : dealers.map((d: any) => d.id)
     getCallMetrics(ids, monthFrom, monthTo).then(setCallMetrics)
-  }, [dealers, selectedDealerId, selectedMonth, dateFrom, dateTo, viewMode])
+  }, [dealers, selectedDealerId, range])
 
   // Load budgets whenever dealer selection changes
   useEffect(() => {
@@ -715,10 +684,7 @@ export default function DealersPage() {
     [dealers, selectedDealerId]
   )
 
-  const isSingleDay = useMemo(() => {
-    const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
-    return from === to
-  }, [viewMode, selectedMonth, dateFrom, dateTo])
+  const isSingleDay = useMemo(() => range.from === range.to, [range])
 
   // Single-day-only Rule B reach: row-level daily_metrics.reach for a single dealer on a
   // single day. summaryRows/campaignRows carry no reach column, so this reads the lazily
@@ -743,31 +709,29 @@ export default function DealersPage() {
       return
     }
     let cancelled = false
-    const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
     const ids = selectedDealerId ? [selectedDealerId] : dealers.map((d: any) => d.id)
-    getMetrics(ids, from, to, ['facebook', 'instagram']).then((data) => {
+    getMetrics(ids, range.from, range.to, ['facebook', 'instagram']).then((data) => {
       if (!cancelled) setSingleDayRows(data)
     })
     return () => { cancelled = true }
-  }, [isSingleDay, dealers, selectedDealerId, viewMode, selectedMonth, dateFrom, dateTo])
+  }, [isSingleDay, dealers, selectedDealerId, range])
 
   // Filtered Reach KPI card — ALWAYS a live call (Rule A: combined KPI
   // never uses stored data), scoped to the current filter state. All roles now
   // get filter-reactive reach (admin, branch_head, dealer).
   useEffect(() => {
     let cancelled = false
-    const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
     const ids = selectedDealerId ? [selectedDealerId] : null
 
     setReachLoading(true)
     setReachData(null)
-    getReach(ids, from, to, ['facebook', 'instagram']).then((result) => {
+    getReach(ids, range.from, range.to, ['facebook', 'instagram']).then((result) => {
       if (cancelled) return
       setReachData(result)
       setReachLoading(false)
     })
     return () => { cancelled = true }
-  }, [isRestrictedRole, selectedDealerId, viewMode, selectedMonth, dateFrom, dateTo])
+  }, [isRestrictedRole, selectedDealerId, range])
 
   // FB/IG table Reach columns — Rule B: single dealer + single day keeps the
   // existing reachByPlatform mechanism (daily_metrics.reach) untouched; every
@@ -783,7 +747,6 @@ export default function DealersPage() {
     }
 
     let cancelled = false
-    const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
     const ids = selectedDealerId ? [selectedDealerId] : null
 
     setTableReach({
@@ -791,17 +754,17 @@ export default function DealersPage() {
       instagram: { value: null, loading: true },
     })
 
-    getReach(ids, from, to, ['facebook']).then((result) => {
+    getReach(ids, range.from, range.to, ['facebook']).then((result) => {
       if (cancelled) return
       setTableReach((prev) => ({ ...prev, facebook: { value: result ? result.reach : null, loading: false } }))
     })
-    getReach(ids, from, to, ['instagram']).then((result) => {
+    getReach(ids, range.from, range.to, ['instagram']).then((result) => {
       if (cancelled) return
       setTableReach((prev) => ({ ...prev, instagram: { value: result ? result.reach : null, loading: false } }))
     })
 
     return () => { cancelled = true }
-  }, [selectedDealerId, isSingleDay, viewMode, selectedMonth, dateFrom, dateTo])
+  }, [selectedDealerId, isSingleDay, range])
 
   const kpi = useMemo(() => kpiFromSummary(summaryRows), [summaryRows])
 
@@ -891,16 +854,10 @@ export default function DealersPage() {
   )
 
   const callSummaryMonths = useMemo(() => {
-    if (viewMode === 'monthly' && selectedMonth !== 'all') {
-      return CALL_MONTHS.filter((m) => m.value === selectedMonth)
-    }
-    if (viewMode === 'daterange') {
-      return CALL_MONTHS.filter(
-        (m) => m.value >= dateFrom.substring(0, 7) && m.value <= dateTo.substring(0, 7)
-      )
-    }
-    return CALL_MONTHS
-  }, [viewMode, selectedMonth, dateFrom, dateTo])
+    const fromMonth = range.from.substring(0, 7)
+    const toMonth = range.to.substring(0, 7)
+    return CALL_MONTHS.filter((m) => m.value >= fromMonth && m.value <= toMonth)
+  }, [range])
 
   // ── PPT Export ───────────────────────────────────────────────────────────────
 
@@ -911,15 +868,11 @@ export default function DealersPage() {
     }
     if (!selectedDealer) return
 
-    const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
-    let dateRangeText = ''
-    if (viewMode === 'monthly') {
-      dateRangeText = !selectedMonth || selectedMonth === 'all'
-        ? 'May 2025 – Mar 2026'
-        : new Date(selectedMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-    } else {
-      dateRangeText = `${from} to ${to}`
-    }
+    const from = range.from
+    const to = range.to
+    const dateRangeText = (from === ALL_TIME_DATE_FROM && to === ALL_TIME_DATE_TO)
+      ? 'May 2025 – Mar 2026'
+      : `${from} to ${to}`
 
     setPptLoading(true)
     try {
@@ -1068,80 +1021,13 @@ export default function DealersPage() {
           </div>
         )}
 
-        {/* Month or date inputs */}
-        {viewMode === 'monthly' ? (
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Month
-            </label>
-            <Select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="min-w-[200px] h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none"
-            >
-              {MONTH_OPTIONS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </Select>
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                From Date
-              </label>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="min-w-[140px] px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                To Date
-              </label>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="min-w-[140px] px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none"
-              />
-            </div>
-          </>
-        )}
-
-        {/* Toggle */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide invisible">
-            View
-          </label>
-          <div className="flex gap-1 h-9 bg-slate-100 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('monthly')}
-              className={`px-3 rounded-md text-[13px] font-medium transition ${
-                viewMode === 'monthly'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setViewMode('daterange')}
-              className={`px-3 rounded-md text-[13px] font-medium transition ${
-                viewMode === 'daterange'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Date Range
-            </button>
-          </div>
+        {/* Date range filter — preset + calendar, plain top-right (label-less, like Overview) */}
+        <div className="ml-auto">
+          <DateRangeFilter value={range} onChange={setRange} />
         </div>
 
         {/* Download PPT */}
-        <div className="ml-auto flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-slate-500 uppercase tracking-wide invisible">
             Export
           </label>

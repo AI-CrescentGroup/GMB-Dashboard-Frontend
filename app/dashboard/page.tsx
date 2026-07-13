@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -8,26 +8,13 @@ import {
 import { getDealers, getMetrics, getMetricsSummary, getMetricsByDealerMonth, getCallMetrics, getBudgets, getReach } from '@/lib/queries'
 import { TrendingUp, MapPin, Activity, Phone, Navigation, Eye, Zap, MousePointerClick } from 'lucide-react'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
+import { DateRangeFilter, isRangeMonthAligned, type DateRange } from '@/components/DateRangeFilter'
 
-const DATE_FROM = '2025-05-28'
-const DATE_TO = '2026-03-31'
+// Full data range — used to preload the month-grain RPC + calls once on mount.
+const DATE_FROM = ALL_TIME_DATE_FROM
+const DATE_TO = ALL_TIME_DATE_TO
 
 // ─── Chart constants ──────────────────────────────────────────────────────────
-
-const CHART_MONTH_OPTIONS = [
-  { value: 'all', label: 'All Months' },
-  { value: '2025-05', label: 'May 2025' },
-  { value: '2025-06', label: 'Jun 2025' },
-  { value: '2025-07', label: 'Jul 2025' },
-  { value: '2025-08', label: 'Aug 2025' },
-  { value: '2025-09', label: 'Sep 2025' },
-  { value: '2025-10', label: 'Oct 2025' },
-  { value: '2025-11', label: 'Nov 2025' },
-  { value: '2025-12', label: 'Dec 2025' },
-  { value: '2026-01', label: 'Jan 2026' },
-  { value: '2026-02', label: 'Feb 2026' },
-  { value: '2026-03', label: 'Mar 2026' },
-]
 
 const STATE_OPTIONS = [
   { value: 'all', label: 'All States' },
@@ -140,7 +127,7 @@ function KpiCard({
         {icon}
         <span className="text-[11px] text-slate-500 uppercase tracking-wide font-medium">{label}</span>
       </div>
-      <div className={`text-xl font-bold ${note ? 'text-slate-400' : 'text-slate-900'}`}>
+      <div className="text-xl font-bold text-slate-900">
         {prefix}{value}{suffix}
       </div>
       {subtitle && <div className="text-xs text-slate-400 mt-1">{subtitle}</div>}
@@ -190,42 +177,49 @@ function CustomTooltip({ active, payload }: any) {
 
 export default function OverviewPage() {
   const [dealers, setDealers] = useState<any[]>([])
-  // Monthly view (default): pre-aggregated (dealer, month, platform) rows from RPC.
+  // Month-aligned ranges (incl. All-time default): fast pre-aggregated
+  // (dealer, month, platform) rows from RPC, preloaded once over the full range.
   const [monthlyAgg, setMonthlyAgg] = useState<any[]>([])
-  // Date Range view: raw day-level rows, fetched lazily only when that mode is opened.
+  // Day-precise ranges only: raw day-level rows, fetched scoped to the selected
+  // window (never the full year) whenever a non-month-aligned range is chosen.
   const [rangeMetrics, setRangeMetrics] = useState<any[]>([])
-  const [rangeLoaded, setRangeLoaded] = useState(false)
   const [rangeLoading, setRangeLoading] = useState(false)
+  const rangeCacheKey = useRef('')
   const [metricsSummary, setMetricsSummary] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [overviewCalls, setOverviewCalls] = useState<any[]>([])
   const [overviewBudgets, setOverviewBudgets] = useState<any[]>([])
 
+  // Single date filter driving the whole page — presets + calendar. Default = All time.
+  const [range, setRange] = useState<DateRange>({ from: ALL_TIME_DATE_FROM, to: ALL_TIME_DATE_TO })
+  const monthAligned = useMemo(() => isRangeMonthAligned(range.from, range.to), [range])
+  const fromMonth = range.from.substring(0, 7)
+  const toMonth = range.to.substring(0, 7)
+
   // chart controls
   const [selectedKpi, setSelectedKpi] = useState('driving_directions')
   const [topPerformersKpi, setTopPerformersKpi] = useState<'calls_received' | 'website_visits' | 'driving_directions'>('calls_received')
-  const [selectedChartMonth, setSelectedChartMonth] = useState('all')
   const [selectedState, setSelectedState] = useState('all')
-  const [viewMode, setViewMode] = useState<'monthly' | 'daterange'>('monthly')
-  const [dateFrom, setDateFrom] = useState('2025-05-28')
-  const [dateTo, setDateTo] = useState('2026-03-31')
 
-  // Live Meta reach KPI card — always unfiltered (locked decision: Overview
-  // KPI cards don't respond to the date filter). Fetches once on mount and
-  // never refetches — do not add filter state to this effect's deps.
+  // Live Meta reach KPI card — live call, now scoped to the selected range.
   const [reachData, setReachData] = useState<Awaited<ReturnType<typeof getReach>>>(null)
   const [reachLoading, setReachLoading] = useState(true)
 
   useEffect(() => {
-    getReach(null, ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO, ['facebook', 'instagram']).then((data) => {
+    let cancelled = false
+    setReachLoading(true)
+    getReach(null, range.from, range.to, ['facebook', 'instagram']).then((data) => {
+      if (cancelled) return
       setReachData(data)
       setReachLoading(false)
     })
-  }, [])
+    return () => { cancelled = true }
+  }, [range])
 
-  // Load dealers then aggregated metrics once on mount — hardcoded full campaign date
-  // range. The Monthly view (default) reads the pre-aggregated RPC output; the raw
-  // full-table scan is NOT run here — it's deferred to the lazy Date Range effect below.
+  // Load range-independent data once on mount: dealers, the month-grain RPC (full
+  // range, powers month-aligned chart views incl. All-time), all-period calls, and
+  // static budgets. The raw scan is NOT run here — it's deferred to the day-precise
+  // effect below, and the KPI summary has its own range-reactive effect.
   useEffect(() => {
     let cancelled = false
     async function init() {
@@ -236,8 +230,6 @@ export default function OverviewPage() {
         const dealerIds = allDealers.map((d: any) => d.id)
         const agg = await getMetricsByDealerMonth(dealerIds, DATE_FROM, DATE_TO, [])
         if (!cancelled) setMonthlyAgg(agg)
-        const summary = await getMetricsSummary(dealerIds, DATE_FROM, DATE_TO, [])
-        if (!cancelled) setMetricsSummary(summary)
         const calls = await getCallMetrics(dealerIds, '2025-05', '2026-03')
         if (!cancelled) setOverviewCalls(calls)
         const budgets = await getBudgets(dealerIds)
@@ -250,26 +242,38 @@ export default function OverviewPage() {
     return () => { cancelled = true }
   }, [])
 
-  // Lazy raw fetch for Date Range mode — gated on viewMode. Fires ONLY after the user
-  // switches to Date Range (viewMode starts 'monthly', so this early-returns on mount),
-  // and only once (rangeLoaded guard), so toggling Monthly⇄Date Range never refetches.
-  // Date Range keeps exact day-precision filtering, hence raw rows rather than the RPC.
+  // KPI-strip totals — range-reactive, always the fast platform-grain RPC for ANY
+  // range (incl. All-time). Never a raw scan. Fires once dealers load, then on range change.
   useEffect(() => {
-    if (viewMode !== 'daterange') return
     if (dealers.length === 0) return
-    if (rangeLoaded) return
+    let cancelled = false
+    const dealerIds = dealers.map((d: any) => d.id)
+    getMetricsSummary(dealerIds, range.from, range.to, []).then((summary) => {
+      if (!cancelled) setMetricsSummary(summary)
+    })
+    return () => { cancelled = true }
+  }, [dealers, range])
+
+  // Scoped raw fetch — ONLY for day-precise (non-month-aligned) ranges. Month-aligned
+  // ranges (incl. the All-time default) use monthlyAgg and never hit this, so default
+  // load fires zero raw scans. Scoped to [from,to] so e.g. "Last 7 days" is a tiny fetch.
+  useEffect(() => {
+    if (monthAligned) return
+    if (dealers.length === 0) return
+    const key = `${range.from}|${range.to}`
+    if (rangeCacheKey.current === key) return
     let cancelled = false
     setRangeLoading(true)
     const dealerIds = dealers.map((d: any) => d.id)
-    getMetrics(dealerIds, DATE_FROM, DATE_TO, [])
+    getMetrics(dealerIds, range.from, range.to, [])
       .then((data) => {
         if (cancelled) return
         setRangeMetrics(data)
-        setRangeLoaded(true)
+        rangeCacheKey.current = key
       })
       .finally(() => { if (!cancelled) setRangeLoading(false) })
     return () => { cancelled = true }
-  }, [viewMode, dealers, rangeLoaded])
+  }, [monthAligned, range, dealers])
 
   // ── KPI computations ─────────────────────────────────────────────────────────
 
@@ -311,6 +315,14 @@ export default function OverviewPage() {
     return { directions, storeVisits, websiteVisits, avgCpc, avgCpm, overallCtr, totalSpend, totalImpressions, totalClicks }
   }, [summaryByPlatform])
 
+  // Calls KPI — range-reactive via month overlap (call_metrics is month-grain).
+  const callsReceivedInRange = useMemo(
+    () => overviewCalls
+      .filter((r: any) => r.month >= fromMonth && r.month <= toMonth)
+      .reduce((s: number, r: any) => s + (r.calls_received || 0), 0),
+    [overviewCalls, fromMonth, toMonth]
+  )
+
   // ── Dealer lookup map ─────────────────────────────────────────────────────────
 
   const dealersMap = useMemo(() => {
@@ -332,14 +344,8 @@ export default function OverviewPage() {
   const topPerformers = useMemo(() => {
     const byDealer: Record<string, any> = {}
     overviewCalls.forEach((r: any) => {
-      let include = false
-      if (viewMode === 'monthly') {
-        include = selectedChartMonth === 'all' || r.month === selectedChartMonth
-      } else {
-        const monthKey = r.month
-        include = monthKey >= dateFrom.substring(0, 7) && monthKey <= dateTo.substring(0, 7)
-      }
-      if (!include) return
+      // Calls have only month grain, so range filtering is always by month overlap.
+      if (!(r.month >= fromMonth && r.month <= toMonth)) return
       if (!byDealer[r.dealer_id]) {
         byDealer[r.dealer_id] = {
           dealer_id: r.dealer_id,
@@ -364,7 +370,7 @@ export default function OverviewPage() {
       })
       .sort((a: any, b: any) => b.calls_received - a.calls_received)
       .slice(0, 15)
-  }, [overviewCalls, dealers, selectedChartMonth, viewMode, dateFrom, dateTo])
+  }, [overviewCalls, dealers, fromMonth, toMonth])
 
   // ── Top Performers (website visits / driving directions) ───────────────────────
   // Same metrics/date-filter pattern as topPerformers above, but sourced from
@@ -376,15 +382,12 @@ export default function OverviewPage() {
     const platform = topPerformersKpi === 'website_visits' ? 'ga4' : 'gmb'
     const field = topPerformersKpi
     const byDealer: Record<string, number> = {}
-    const rows = viewMode === 'monthly' ? monthlyAgg : rangeMetrics
+    const rows = monthAligned ? monthlyAgg : rangeMetrics
     rows.forEach((row: any) => {
       if (row.platform !== platform) return
-      let include = false
-      if (viewMode === 'monthly') {
-        include = selectedChartMonth === 'all' || row.month === selectedChartMonth
-      } else {
-        include = row.metric_date >= dateFrom && row.metric_date <= dateTo
-      }
+      const include = monthAligned
+        ? (row.month >= fromMonth && row.month <= toMonth)
+        : (row.metric_date >= range.from && row.metric_date <= range.to)
       if (!include) return
       byDealer[row.dealer_id] = (byDealer[row.dealer_id] || 0) + (row[field] || 0)
     })
@@ -401,7 +404,7 @@ export default function OverviewPage() {
       })
       .sort((a, b) => b.value - a.value)
       .slice(0, 15)
-  }, [monthlyAgg, rangeMetrics, dealers, topPerformersKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
+  }, [monthlyAgg, rangeMetrics, dealers, topPerformersKpi, monthAligned, fromMonth, toMonth, range])
 
   // ── Pie chart data ────────────────────────────────────────────────────────────
 
@@ -411,13 +414,7 @@ export default function OverviewPage() {
       const answeredAgg: Record<string, number> = {}
       const missedAgg: Record<string, number> = {}
       overviewCalls.forEach((r: any) => {
-        let include = false
-        if (viewMode === 'monthly') {
-          include = selectedChartMonth === 'all' || r.month === selectedChartMonth
-        } else {
-          include = r.month >= dateFrom.substring(0, 7) && r.month <= dateTo.substring(0, 7)
-        }
-        if (!include) return
+        if (!(r.month >= fromMonth && r.month <= toMonth)) return
         const dealer = dealersMap[r.dealer_id]
         if (!dealer?.zone) return
         agg[dealer.zone] = (agg[dealer.zone] || 0) + (r.calls_received || 0)
@@ -429,14 +426,11 @@ export default function OverviewPage() {
         .filter((e) => e.value > 0)
         .sort((a, b) => b.value - a.value)
     } else {
-      const rows = viewMode === 'monthly' ? monthlyAgg : rangeMetrics
+      const rows = monthAligned ? monthlyAgg : rangeMetrics
       rows.forEach((row: any) => {
-        let include = false
-        if (viewMode === 'monthly') {
-          include = selectedChartMonth === 'all' || row.month === selectedChartMonth
-        } else {
-          include = row.metric_date >= dateFrom && row.metric_date <= dateTo
-        }
+        const include = monthAligned
+          ? (row.month >= fromMonth && row.month <= toMonth)
+          : (row.metric_date >= range.from && row.metric_date <= range.to)
         if (!include) return
         const dealer = dealersMap[row.dealer_id]
         if (!dealer?.zone) return
@@ -447,7 +441,7 @@ export default function OverviewPage() {
         .filter((e) => e.value > 0)
         .sort((a, b) => b.value - a.value)
     }
-  }, [monthlyAgg, rangeMetrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
+  }, [monthlyAgg, rangeMetrics, overviewCalls, dealersMap, selectedKpi, monthAligned, fromMonth, toMonth, range])
 
   const tierPieData = useMemo((): { name: string; value: number }[] => {
     const agg: Record<string, number> = {}
@@ -455,13 +449,7 @@ export default function OverviewPage() {
       const answeredAgg: Record<string, number> = {}
       const missedAgg: Record<string, number> = {}
       overviewCalls.forEach((r: any) => {
-        let include = false
-        if (viewMode === 'monthly') {
-          include = selectedChartMonth === 'all' || r.month === selectedChartMonth
-        } else {
-          include = r.month >= dateFrom.substring(0, 7) && r.month <= dateTo.substring(0, 7)
-        }
-        if (!include) return
+        if (!(r.month >= fromMonth && r.month <= toMonth)) return
         const dealer = dealersMap[r.dealer_id]
         if (!dealer?.market) return
         agg[dealer.market] = (agg[dealer.market] || 0) + (r.calls_received || 0)
@@ -473,14 +461,11 @@ export default function OverviewPage() {
         .filter((e) => e.value > 0)
         .sort((a, b) => b.value - a.value)
     } else {
-      const rows = viewMode === 'monthly' ? monthlyAgg : rangeMetrics
+      const rows = monthAligned ? monthlyAgg : rangeMetrics
       rows.forEach((row: any) => {
-        let include = false
-        if (viewMode === 'monthly') {
-          include = selectedChartMonth === 'all' || row.month === selectedChartMonth
-        } else {
-          include = row.metric_date >= dateFrom && row.metric_date <= dateTo
-        }
+        const include = monthAligned
+          ? (row.month >= fromMonth && row.month <= toMonth)
+          : (row.metric_date >= range.from && row.metric_date <= range.to)
         if (!include) return
         const dealer = dealersMap[row.dealer_id]
         if (!dealer?.market) return
@@ -491,7 +476,7 @@ export default function OverviewPage() {
         .filter((e) => e.value > 0)
         .sort((a, b) => b.value - a.value)
     }
-  }, [monthlyAgg, rangeMetrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
+  }, [monthlyAgg, rangeMetrics, overviewCalls, dealersMap, selectedKpi, monthAligned, fromMonth, toMonth, range])
 
   // ── State bar chart data (by month) ────────────────────────────────────────
 
@@ -511,9 +496,8 @@ export default function OverviewPage() {
 
   const stateBarData = useMemo((): { month: string; value: number }[] => {
     const agg: Record<string, number> = {}
-    const relevantMonths = viewMode === 'monthly'
-      ? MONTHS_FOR_CHART
-      : MONTHS_FOR_CHART.filter(m => m.key >= dateFrom.substring(0, 7) && m.key <= dateTo.substring(0, 7))
+    // Only show month buckets that fall within the selected range.
+    const relevantMonths = MONTHS_FOR_CHART.filter(m => m.key >= fromMonth && m.key <= toMonth)
     relevantMonths.forEach((m) => { agg[m.key] = 0 })
 
     if (selectedKpi === 'calls_received') {
@@ -522,13 +506,6 @@ export default function OverviewPage() {
       relevantMonths.forEach((m) => { answeredAgg[m.key] = 0; missedAgg[m.key] = 0 })
       overviewCalls.forEach((r: any) => {
         if (!agg.hasOwnProperty(r.month)) return
-        let include = false
-        if (viewMode === 'monthly') {
-          include = selectedState === 'all' || true
-        } else {
-          include = r.month >= dateFrom.substring(0, 7) && r.month <= dateTo.substring(0, 7)
-        }
-        if (!include) return
         const dealer = dealersMap[r.dealer_id]
         if (!dealer?.state) return
         if (selectedState !== 'all' && dealer.state !== selectedState) return
@@ -543,17 +520,12 @@ export default function OverviewPage() {
         missed: missedAgg[m.key],
       }))
     } else {
-      const rows = viewMode === 'monthly' ? monthlyAgg : rangeMetrics
+      const rows = monthAligned ? monthlyAgg : rangeMetrics
       rows.forEach((row: any) => {
-        const monthKey = viewMode === 'monthly' ? row.month : row.metric_date?.substring(0, 7)
+        const monthKey = monthAligned ? row.month : row.metric_date?.substring(0, 7)
         if (!monthKey || !agg.hasOwnProperty(monthKey)) return
-        let include = false
-        if (viewMode === 'monthly') {
-          include = selectedState === 'all' || true
-        } else {
-          include = row.metric_date >= dateFrom && row.metric_date <= dateTo
-        }
-        if (!include) return
+        // For day-precise ranges, also clip to exact day bounds within the edge months.
+        if (!monthAligned && !(row.metric_date >= range.from && row.metric_date <= range.to)) return
         const dealer = dealersMap[row.dealer_id]
         if (!dealer?.state) return
         if (selectedState !== 'all' && dealer.state !== selectedState) return
@@ -564,15 +536,15 @@ export default function OverviewPage() {
         value: agg[m.key],
       }))
     }
-  }, [monthlyAgg, rangeMetrics, overviewCalls, dealersMap, selectedKpi, selectedState, viewMode, dateFrom, dateTo])
+  }, [monthlyAgg, rangeMetrics, overviewCalls, dealersMap, selectedKpi, selectedState, monthAligned, fromMonth, toMonth, range])
 
   // Top 15 dealers (alphabetical) as placeholder
   const top15Dealers = useMemo(() => dealers.slice(0, 15), [dealers])
 
-  // Charts show a loading state during the initial mount fetch AND during the lazy
-  // Date Range raw fetch (first switch into Date Range), so they never flash a
-  // misleading "No data for selected period" while rangeMetrics is still in flight.
-  const chartsLoading = loading || (viewMode === 'daterange' && rangeLoading)
+  // Charts show a loading state during the initial mount fetch AND during a
+  // day-precise scoped raw fetch, so they never flash a misleading "No data for
+  // selected period" while rangeMetrics is still in flight.
+  const chartsLoading = loading || (!monthAligned && rangeLoading)
 
   const totalZone = zonePieData.reduce((s, d) => s + d.value, 0)
   const totalTier = tierPieData.reduce((s, d) => s + d.value, 0)
@@ -589,9 +561,12 @@ export default function OverviewPage() {
     <div className="mx-auto max-w-[1440px] px-6 lg:px-8 py-6 lg:py-8 space-y-6">
 
       {/* ── Header ── */}
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Overview</h1>
-        <p className="text-sm text-slate-500 mt-1">Aggregate performance across all dealers</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Overview</h1>
+          <p className="text-sm text-slate-500 mt-1">Aggregate performance across all dealers</p>
+        </div>
+        <DateRangeFilter value={range} onChange={setRange} />
       </div>
 
       {/* ── KPI Strip (11 cards, 4 per row) ── */}
@@ -622,14 +597,14 @@ export default function OverviewPage() {
             value={
               reachLoading ? '…'
               : reachData?.reach == null ? '—'
-              : formatNumber(reachData.reach)
+              : formatMillions(reachData.reach)
             }
             note={
-              reachLoading ? 'All Meta campaigns · full period'
+              reachLoading ? 'All Meta campaigns'
               : reachData?.reach == null ? 'Reach unavailable'
               : reachData.dealers_covered < reachData.dealers_requested
-                ? `All Meta campaigns · full period · ${reachData.dealers_covered}/${reachData.dealers_requested} dealers`
-                : 'All Meta campaigns · full period'
+                ? `All Meta campaigns · ${reachData.dealers_covered}/${reachData.dealers_requested} dealers`
+                : 'All Meta campaigns'
             }
             title={!reachLoading && reachData?.reach == null ? 'Reach unavailable — check connection' : undefined}
           />
@@ -674,7 +649,7 @@ export default function OverviewPage() {
           <KpiCard
             icon={<Phone size={16} className="text-emerald-500" />}
             label="Calls"
-            value={formatNumber(overviewCalls.reduce((s: number, r: any) => s + (r.calls_received || 0), 0))}
+            value={formatNumber(callsReceivedInRange)}
           />
 
           {/* Row 3 */}
@@ -704,7 +679,8 @@ export default function OverviewPage() {
           <span className="text-sm font-semibold text-slate-800">Performance Trends</span>
         </div>
 
-        {/* Controls row */}
+        {/* Controls row — the date filter now lives in the page header (top-right);
+            this row keeps only the chart's own KPI selector. */}
         <div className="flex flex-wrap gap-3 items-end mb-6">
           <div>
             <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">KPI</label>
@@ -717,75 +693,6 @@ export default function OverviewPage() {
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-          </div>
-
-          {viewMode === 'monthly' ? (
-            <div>
-              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">Month</label>
-              <select
-                value={selectedChartMonth}
-                onChange={(e) => setSelectedChartMonth(e.target.value)}
-                className={selectCls}
-              >
-                {CHART_MONTH_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
-                  From Date
-                </label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="min-w-[140px] px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">
-                  To Date
-                </label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="min-w-[140px] px-3 h-9 border border-slate-200 rounded-lg text-[13px] text-slate-700 bg-white focus:border-indigo-400 focus:outline-none"
-                />
-              </div>
-            </>
-          )}
-
-          {/* Toggle */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-500 uppercase tracking-wide invisible">
-              View
-            </label>
-            <div className="flex gap-1 h-9 bg-slate-100 rounded-lg p-1">
-              <button
-                onClick={() => setViewMode('monthly')}
-                className={`px-3 rounded-md text-[13px] font-medium transition ${
-                  viewMode === 'monthly'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Monthly
-              </button>
-              <button
-                onClick={() => setViewMode('daterange')}
-                className={`px-3 rounded-md text-[13px] font-medium transition ${
-                  viewMode === 'daterange'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Date Range
-              </button>
-            </div>
           </div>
         </div>
 
