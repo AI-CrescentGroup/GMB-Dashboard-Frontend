@@ -613,16 +613,10 @@ export default function DealersPage() {
   const [lightboxPlatform, setLightboxPlatform] = useState<'google' | 'facebook' | 'instagram' | null>(null)
   const [carouselIndex, setCarouselIndex] = useState<{ google: number; facebook: number; instagram: number }>({ google: 0, facebook: 0, instagram: 0 })
   const [showGlossary, setShowGlossary] = useState(false)
-  const [allTimeSummary, setAllTimeSummary] = useState<any[]>([])
-  const [allTimeCalls, setAllTimeCalls] = useState<any[]>([])
 
-  // Live Meta reach — admin filtered KPI card
+  // Live Meta reach — filtered KPI card (all roles)
   const [reachData, setReachData] = useState<Awaited<ReturnType<typeof getReach>>>(null)
   const [reachLoading, setReachLoading] = useState(true)
-
-  // Live Meta reach — dealer/branch_head all-time KPI card
-  const [allTimeReachData, setAllTimeReachData] = useState<Awaited<ReturnType<typeof getReach>>>(null)
-  const [allTimeReachLoading, setAllTimeReachLoading] = useState(true)
 
   // Live Meta reach — FB/IG table columns (multi-day range or "all dealers" only;
   // single-dealer + single-day case keeps the existing reachByPlatform mechanism)
@@ -692,31 +686,6 @@ export default function DealersPage() {
     getCallMetrics(ids, monthFrom, monthTo).then(setCallMetrics)
   }, [dealers, selectedDealerId, selectedMonth, dateFrom, dateTo, viewMode])
 
-  // All-time unfiltered fetch for dealer/branch_head KPI strip.
-  // Ignores month/date filters AND dealer selection: dealer sees own store,
-  // branch_head sees all assigned dealers combined (scope enforced by RLS).
-  useEffect(() => {
-    if (!isRestrictedRole || dealers.length === 0) return
-    let cancelled = false
-    const ids = dealers.map((d: any) => d.id)
-    getMetricsSummary(ids, ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO, []).then((data) => {
-      if (!cancelled) setAllTimeSummary(data)
-    })
-    getCallMetrics(ids, '2025-05', '2026-03').then((data) => {
-      if (!cancelled) setAllTimeCalls(data)
-    })
-
-    // Live Meta reach — always a real API call, never derived from stored data.
-    setAllTimeReachLoading(true)
-    getReach(ids, ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO, ['facebook', 'instagram']).then((result) => {
-      if (cancelled) return
-      setAllTimeReachData(result)
-      setAllTimeReachLoading(false)
-    })
-
-    return () => { cancelled = true }
-  }, [isRestrictedRole, dealers])
-
   // Load budgets whenever dealer selection changes
   useEffect(() => {
     if (dealers.length === 0) return
@@ -782,10 +751,10 @@ export default function DealersPage() {
     return () => { cancelled = true }
   }, [isSingleDay, dealers, selectedDealerId, viewMode, selectedMonth, dateFrom, dateTo])
 
-  // Admin filtered Reach KPI card — ALWAYS a live call (Rule A: combined KPI
-  // never uses stored data), scoped to the current filter state.
+  // Filtered Reach KPI card — ALWAYS a live call (Rule A: combined KPI
+  // never uses stored data), scoped to the current filter state. All roles now
+  // get filter-reactive reach (admin, branch_head, dealer).
   useEffect(() => {
-    if (isRestrictedRole) return
     let cancelled = false
     const { from, to } = computeDateRange(viewMode, selectedMonth, dateFrom, dateTo)
     const ids = selectedDealerId ? [selectedDealerId] : null
@@ -835,14 +804,6 @@ export default function DealersPage() {
   }, [selectedDealerId, isSingleDay, viewMode, selectedMonth, dateFrom, dateTo])
 
   const kpi = useMemo(() => kpiFromSummary(summaryRows), [summaryRows])
-
-  const allTimeKpi = useMemo(() => kpiFromSummary(allTimeSummary), [allTimeSummary])
-
-  const allTimeCallTotals = useMemo(() => {
-    const received = allTimeCalls.reduce((s: number, r: any) => s + (r.calls_received || 0), 0)
-    const answered = allTimeCalls.reduce((s: number, r: any) => s + (r.calls_answered || 0), 0)
-    return { received, answered }
-  }, [allTimeCalls])
 
   // campaignRows is already at (campaign_name, platform) grain from get_campaign_summary,
   // shaped to match what groupCampaigns consumes — so groupCampaigns still owns the
@@ -1085,60 +1046,6 @@ export default function DealersPage() {
         <span className="text-xs text-slate-400">Updated till: {latestDate}</span>
       </div>
 
-      {/* ── All-time KPI Strip (dealer + branch_head only, above filters, filter-independent) ── */}
-      {isRestrictedRole && (
-        <div className="mb-6">
-          <div className="text-xs text-slate-400 mb-2">All-time totals</div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <KpiCard
-              icon={<TrendingUp size={16} className="text-indigo-500" />}
-              label="Total Spend"
-              value={formatCurrency(allTimeKpi.totalSpend)}
-            />
-            <KpiCard
-              icon={<Eye size={16} className="text-blue-500" />}
-              label="Impressions"
-              value={formatMillions(allTimeKpi.totalImpressions)}
-            />
-            <KpiCard
-              icon={<Activity size={16} className="text-slate-300" />}
-              label="Reach"
-              value={
-                allTimeReachLoading ? '…'
-                : allTimeReachData?.reach == null ? '—'
-                : formatMillions(allTimeReachData.reach)
-              }
-              note={
-                allTimeReachLoading ? undefined
-                : allTimeReachData?.reach == null ? 'Reach unavailable'
-                : allTimeReachData.dealers_covered < allTimeReachData.dealers_requested
-                  ? `${allTimeReachData.dealers_covered}/${allTimeReachData.dealers_requested} dealers`
-                  : undefined
-              }
-              title={!allTimeReachLoading && allTimeReachData?.reach == null ? 'Reach unavailable — check connection' : undefined}
-            />
-            <KpiCard
-              icon={<Zap size={16} className="text-amber-500" />}
-              label="Link Clicks"
-              value={role === 'dealer' ? formatNumber(allTimeKpi.totalClicks) : formatMillions(allTimeKpi.totalClicks)}
-            />
-            <KpiCard
-              icon={<Activity size={16} className="text-emerald-500" />}
-              label="Website Visits"
-              value={formatNumber(allTimeKpi.websiteVisits)}
-            />
-            <KpiCard
-              icon={<Phone size={16} className="text-emerald-500" />}
-              label="Calls"
-              value={allTimeCallTotals.received > 0 ? formatNumber(allTimeCallTotals.received) : '—'}
-              subtitle={allTimeCallTotals.received > 0
-                ? `${Math.round((allTimeCallTotals.answered / allTimeCallTotals.received) * 100)}% answered (${formatNumber(allTimeCallTotals.answered)})`
-                : 'No call data'}
-            />
-          </div>
-        </div>
-      )}
-
       {/* ── Filter Bar ── */}
       <div className="flex flex-wrap items-end gap-3 mb-6 bg-white rounded-xl border border-slate-200 shadow px-5 py-4">
 
@@ -1263,8 +1170,7 @@ export default function DealersPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          {/* ── KPI Strip (admin only — dealer/branch_head see the all-time strip above filters) ── */}
-          {!isRestrictedRole && (
+          {/* ── KPI Strip (filter-reactive, all roles) ── */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <KpiCard
               icon={<TrendingUp size={16} className="text-indigo-500" />}
@@ -1312,7 +1218,6 @@ export default function DealersPage() {
                 : 'No call data'}
             />
           </div>
-          )}
 
           {/* ── Google Ads Table ── */}
           {googleCampaigns.length > 0 && (
