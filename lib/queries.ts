@@ -59,68 +59,123 @@ export async function getMetrics(
   return allData
 }
 
-// Aggregate metrics by month
-export async function getMetricsByMonth(dealerIds: string[], platforms: string[], dateFrom: string, dateTo: string) {
-  const metrics = await getMetrics(dealerIds, dateFrom, dateTo, platforms)
-  return aggregateByMonth(metrics)
+// Dealer-list -> RPC param: empty or "all dealers" list means no filter (NULL),
+// matching getMetrics()'s existing .in('dealer_id', ...) skip condition below.
+function toRpcDealerIds(dealerIds: string[]): string[] | null {
+  return (dealerIds.length > 0 && dealerIds.length < 173) ? dealerIds : null
 }
 
-// Aggregate in JS
-function aggregateByMonth(metrics: any[]) {
-  const months = ['2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12', '2026-01', '2026-02', '2026-03']
+// Get aggregated metrics totals, summed server-side via Postgres RPC (get_metrics_summary).
+// Returns one row per platform. Use for KPI totals — never for per-dealer breakdowns
+// (this RPC only groups by platform, not dealer_id).
+export async function getMetricsSummary(
+  dealerIds: string[],
+  dateFrom: string,
+  dateTo: string,
+  platforms: string[]
+): Promise<any[]> {
+  const { data, error } = await supabase.rpc('get_metrics_summary', {
+    p_dealer_ids: toRpcDealerIds(dealerIds),
+    p_date_from: dateFrom || null,
+    p_date_to: dateTo || null,
+    p_platforms: platforms.length > 0 ? platforms : null,
+  })
+  if (error) throw error
+  return data || []
+}
+
+const MONTHLY_AGG_MONTHS = ['2025-05', '2025-06', '2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12', '2026-01', '2026-02', '2026-03']
+const MONTHLY_AGG_PLATFORMS = ['google', 'facebook', 'instagram', 'ga4', 'gmb'] as const
+
+function emptyMonthlyAgg(): { [month: string]: any } {
   const monthMap: { [key: string]: any } = {}
-
-  months.forEach((month) => {
-    monthMap[month] = {
-      google: { spend: 0, impressions: 0, clicks: 0, visits: 0, directions: 0, events: 0 },
-      facebook: { spend: 0, impressions: 0, clicks: 0, visits: 0, directions: 0, events: 0 },
-      instagram: { spend: 0, impressions: 0, clicks: 0, visits: 0, directions: 0, events: 0 },
-      ga4: {
-        spend: 0,
-        impressions: 0,
-        clicks: 0,
-        visits: 0,
-        directions: 0,
-        events: 0,
-        event_call_number_track: 0,
-        event_call_track: 0,
-        event_download_catalogue: 0,
-        event_drive_direction: 0,
-        event_enquiry_track: 0,
-        event_form_submit: 0
-      },
-      gmb: { spend: 0, impressions: 0, clicks: 0, visits: 0, directions: 0, events: 0 },
-    }
+  MONTHLY_AGG_MONTHS.forEach((month) => {
+    monthMap[month] = {}
+    MONTHLY_AGG_PLATFORMS.forEach((platform) => {
+      monthMap[month][platform] = { spend: 0, impressions: 0, clicks: 0, visits: 0, directions: 0, events: 0 }
+    })
   })
-
-  metrics.forEach((row) => {
-    const monthKey = row.metric_date.substring(0, 7)
-    if (monthMap[monthKey]) {
-      const platform = row.platform
-      const baseAgg: any = {
-        spend: (monthMap[monthKey][platform]?.spend || 0) + (row.spend_inr || 0),
-        impressions: (monthMap[monthKey][platform]?.impressions || 0) + (row.impressions || 0),
-        clicks: (monthMap[monthKey][platform]?.clicks || 0) + (row.link_clicks || 0),
-        visits: (monthMap[monthKey][platform]?.visits || 0) + (row.website_visits || 0),
-        directions: (monthMap[monthKey][platform]?.directions || 0) + (row.driving_directions || 0),
-        events: (monthMap[monthKey][platform]?.events || 0) + (row.event_count || 0),
-      }
-
-      // Add GA4 event fields if platform is ga4
-      if (platform === 'ga4') {
-        baseAgg['event_call_number_track'] = (monthMap[monthKey][platform]?.event_call_number_track || 0) + (row.event_call_number_track || 0)
-        baseAgg['event_call_track'] = (monthMap[monthKey][platform]?.event_call_track || 0) + (row.event_call_track || 0)
-        baseAgg['event_download_catalogue'] = (monthMap[monthKey][platform]?.event_download_catalogue || 0) + (row.event_download_catalogue || 0)
-        baseAgg['event_drive_direction'] = (monthMap[monthKey][platform]?.event_drive_direction || 0) + (row.event_drive_direction || 0)
-        baseAgg['event_enquiry_track'] = (monthMap[monthKey][platform]?.event_enquiry_track || 0) + (row.event_enquiry_track || 0)
-        baseAgg['event_form_submit'] = (monthMap[monthKey][platform]?.event_form_submit || 0) + (row.event_form_submit || 0)
-      }
-
-      monthMap[monthKey][platform] = baseAgg
-    }
-  })
-
   return monthMap
+}
+
+// Aggregate metrics by month, summed server-side via Postgres RPC (get_metrics_monthly).
+// Reshapes the RPC's flat (month, platform) rows into the same nested monthMap shape
+// the existing chart components (DrivingDirectionsChart, WebsiteVisitsChart,
+// EventCountChart) already expect, so no chart changes are needed.
+export async function getMetricsMonthlyAgg(dealerIds: string[], platforms: string[], dateFrom: string, dateTo: string) {
+  const { data, error } = await supabase.rpc('get_metrics_monthly', {
+    p_dealer_ids: toRpcDealerIds(dealerIds),
+    p_date_from: dateFrom || null,
+    p_date_to: dateTo || null,
+    p_platforms: platforms.length > 0 ? platforms : null,
+  })
+  if (error) throw error
+
+  const monthMap = emptyMonthlyAgg()
+  ;(data || []).forEach((row: any) => {
+    if (!monthMap[row.month] || !monthMap[row.month][row.platform]) return
+    monthMap[row.month][row.platform] = {
+      spend: Number(row.total_spend_inr) || 0,
+      impressions: Number(row.total_impressions) || 0,
+      clicks: Number(row.total_link_clicks) || 0,
+      visits: Number(row.total_website_visits) || 0,
+      directions: Number(row.total_driving_directions) || 0,
+      events: Number(row.total_event_count) || 0,
+    }
+  })
+  return monthMap
+}
+
+// Get metrics pre-aggregated to (dealer_id, month, platform) grain, summed server-side
+// via Postgres RPC (get_metrics_by_dealer_month). Collapses ~162k raw rows into ~6.3k,
+// letting the Overview charts keep full client-side interactivity (zone/tier/state/KPI/
+// month) over a tiny payload — one RPC call instead of ~163 paginated .select() pages.
+// Column names deliberately match the raw daily_metrics columns so the charts'
+// row[selectedKpi] indexing works unchanged. Numeric coercion guards arithmetic safety
+// (PostgREST can return numeric as a string). Reach is intentionally excluded.
+export async function getMetricsByDealerMonth(
+  dealerIds: string[],
+  dateFrom: string,
+  dateTo: string,
+  platforms: string[]
+): Promise<any[]> {
+  const params = {
+    p_dealer_ids: toRpcDealerIds(dealerIds),
+    p_date_from: dateFrom || null,
+    p_date_to: dateTo || null,
+    p_platforms: platforms.length > 0 ? platforms : null,
+  }
+  // PostgREST caps every response at max-rows (1000 here), so a single .rpc() call
+  // silently truncates the ~6.3k-row result and the charts under-count. Paginate with
+  // .range() — only ~7 small pages (vs the old raw path's ~163). An explicit .order()
+  // gives a stable sort across pages so no row is dropped or double-counted at the seams
+  // (the SQL function itself has no ORDER BY).
+  let all: any[] = []
+  let from = 0
+  const pageSize = 1000
+  while (true) {
+    const { data, error } = await supabase
+      .rpc('get_metrics_by_dealer_month', params)
+      .order('dealer_id', { ascending: true })
+      .order('month', { ascending: true })
+      .order('platform', { ascending: true })
+      .range(from, from + pageSize - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    all = all.concat(data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return all.map((r: any) => ({
+    dealer_id: r.dealer_id,
+    month: r.month,
+    platform: r.platform,
+    impressions: Number(r.impressions) || 0,
+    link_clicks: Number(r.link_clicks) || 0,
+    spend_inr: Number(r.spend_inr) || 0,
+    website_visits: Number(r.website_visits) || 0,
+    driving_directions: Number(r.driving_directions) || 0,
+  }))
 }
 
 // Get unique filter options (NO DISTINCT — deduplicate in JS)

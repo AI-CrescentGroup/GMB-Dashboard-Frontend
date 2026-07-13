@@ -5,7 +5,7 @@ import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { getDealers, getMetrics, getCallMetrics, getBudgets, getReach } from '@/lib/queries'
+import { getDealers, getMetrics, getMetricsSummary, getMetricsByDealerMonth, getCallMetrics, getBudgets, getReach } from '@/lib/queries'
 import { TrendingUp, MapPin, Activity, Phone, Navigation, Eye, Zap, MousePointerClick } from 'lucide-react'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
 
@@ -190,7 +190,13 @@ function CustomTooltip({ active, payload }: any) {
 
 export default function OverviewPage() {
   const [dealers, setDealers] = useState<any[]>([])
-  const [metrics, setMetrics] = useState<any[]>([])
+  // Monthly view (default): pre-aggregated (dealer, month, platform) rows from RPC.
+  const [monthlyAgg, setMonthlyAgg] = useState<any[]>([])
+  // Date Range view: raw day-level rows, fetched lazily only when that mode is opened.
+  const [rangeMetrics, setRangeMetrics] = useState<any[]>([])
+  const [rangeLoaded, setRangeLoaded] = useState(false)
+  const [rangeLoading, setRangeLoading] = useState(false)
+  const [metricsSummary, setMetricsSummary] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [overviewCalls, setOverviewCalls] = useState<any[]>([])
   const [overviewBudgets, setOverviewBudgets] = useState<any[]>([])
@@ -217,7 +223,9 @@ export default function OverviewPage() {
     })
   }, [])
 
-  // Load dealers then metrics once on mount — hardcoded full campaign date range
+  // Load dealers then aggregated metrics once on mount — hardcoded full campaign date
+  // range. The Monthly view (default) reads the pre-aggregated RPC output; the raw
+  // full-table scan is NOT run here — it's deferred to the lazy Date Range effect below.
   useEffect(() => {
     let cancelled = false
     async function init() {
@@ -226,8 +234,10 @@ export default function OverviewPage() {
         const allDealers = await getDealers()
         if (!cancelled) setDealers(allDealers)
         const dealerIds = allDealers.map((d: any) => d.id)
-        const data = await getMetrics(dealerIds, DATE_FROM, DATE_TO, [])
-        if (!cancelled) setMetrics(data)
+        const agg = await getMetricsByDealerMonth(dealerIds, DATE_FROM, DATE_TO, [])
+        if (!cancelled) setMonthlyAgg(agg)
+        const summary = await getMetricsSummary(dealerIds, DATE_FROM, DATE_TO, [])
+        if (!cancelled) setMetricsSummary(summary)
         const calls = await getCallMetrics(dealerIds, '2025-05', '2026-03')
         if (!cancelled) setOverviewCalls(calls)
         const budgets = await getBudgets(dealerIds)
@@ -240,33 +250,58 @@ export default function OverviewPage() {
     return () => { cancelled = true }
   }, [])
 
+  // Lazy raw fetch for Date Range mode — gated on viewMode. Fires ONLY after the user
+  // switches to Date Range (viewMode starts 'monthly', so this early-returns on mount),
+  // and only once (rangeLoaded guard), so toggling Monthly⇄Date Range never refetches.
+  // Date Range keeps exact day-precision filtering, hence raw rows rather than the RPC.
+  useEffect(() => {
+    if (viewMode !== 'daterange') return
+    if (dealers.length === 0) return
+    if (rangeLoaded) return
+    let cancelled = false
+    setRangeLoading(true)
+    const dealerIds = dealers.map((d: any) => d.id)
+    getMetrics(dealerIds, DATE_FROM, DATE_TO, [])
+      .then((data) => {
+        if (cancelled) return
+        setRangeMetrics(data)
+        setRangeLoaded(true)
+      })
+      .finally(() => { if (!cancelled) setRangeLoading(false) })
+    return () => { cancelled = true }
+  }, [viewMode, dealers, rangeLoaded])
+
   // ── KPI computations ─────────────────────────────────────────────────────────
 
-  const kpi = useMemo(() => {
-    let directions = 0, storeVisits = 0, websiteVisits = 0
-    let googleSpend = 0, googleClicks = 0
-    let metaSpend = 0, metaImpressions = 0
-    let totalClicks = 0, totalImpressions = 0
+  // KPI totals are computed server-side (SUM/COUNT in Postgres via get_metrics_summary),
+  // not by looping over the full raw `metrics` array. Derived ratios (CPC/CPM/CTR) are
+  // computed from these SUMMED totals — never averaged from per-row ctr_percent/avg_cpc_inr,
+  // which would produce a mathematically wrong blended rate.
+  const summaryByPlatform = useMemo(() => {
+    const map: Record<string, any> = {}
+    metricsSummary.forEach((row: any) => { map[row.platform] = row })
+    return map
+  }, [metricsSummary])
 
-    metrics.forEach((m: any) => {
-      if (m.platform === 'google') {
-        googleSpend += m.spend_inr || 0
-        googleClicks += m.link_clicks || 0
-        totalClicks += m.link_clicks || 0
-        totalImpressions += m.impressions || 0
-      }
-      if (m.platform === 'gmb') {
-        directions += m.driving_directions || 0
-        storeVisits += m.store_visits || 0
-      }
-      if (m.platform === 'ga4') websiteVisits += m.website_visits || 0
-      if (m.platform === 'facebook' || m.platform === 'instagram') {
-        metaSpend += m.spend_inr || 0
-        metaImpressions += m.impressions || 0
-        totalClicks += m.link_clicks || 0
-        totalImpressions += m.impressions || 0
-      }
-    })
+  const kpi = useMemo(() => {
+    const google = summaryByPlatform['google'] || {}
+    const facebook = summaryByPlatform['facebook'] || {}
+    const instagram = summaryByPlatform['instagram'] || {}
+    const ga4 = summaryByPlatform['ga4'] || {}
+    const gmb = summaryByPlatform['gmb'] || {}
+
+    const directions = Number(gmb.total_driving_directions) || 0
+    const storeVisits = Number(gmb.total_store_visits) || 0
+    const websiteVisits = Number(ga4.total_website_visits) || 0
+
+    const googleSpend = Number(google.total_spend_inr) || 0
+    const googleClicks = Number(google.total_link_clicks) || 0
+
+    const metaSpend = (Number(facebook.total_spend_inr) || 0) + (Number(instagram.total_spend_inr) || 0)
+    const metaImpressions = (Number(facebook.total_impressions) || 0) + (Number(instagram.total_impressions) || 0)
+
+    const totalClicks = googleClicks + (Number(facebook.total_link_clicks) || 0) + (Number(instagram.total_link_clicks) || 0)
+    const totalImpressions = (Number(google.total_impressions) || 0) + metaImpressions
 
     const avgCpc = googleClicks > 0 ? googleSpend / googleClicks : 0
     const avgCpm = metaImpressions > 0 ? (metaSpend / metaImpressions) * 1000 : 0
@@ -274,7 +309,7 @@ export default function OverviewPage() {
     const totalSpend = googleSpend + metaSpend
 
     return { directions, storeVisits, websiteVisits, avgCpc, avgCpm, overallCtr, totalSpend, totalImpressions, totalClicks }
-  }, [metrics])
+  }, [summaryByPlatform])
 
   // ── Dealer lookup map ─────────────────────────────────────────────────────────
 
@@ -341,11 +376,12 @@ export default function OverviewPage() {
     const platform = topPerformersKpi === 'website_visits' ? 'ga4' : 'gmb'
     const field = topPerformersKpi
     const byDealer: Record<string, number> = {}
-    metrics.forEach((row: any) => {
+    const rows = viewMode === 'monthly' ? monthlyAgg : rangeMetrics
+    rows.forEach((row: any) => {
       if (row.platform !== platform) return
       let include = false
       if (viewMode === 'monthly') {
-        include = selectedChartMonth === 'all' || row.metric_date?.startsWith(selectedChartMonth)
+        include = selectedChartMonth === 'all' || row.month === selectedChartMonth
       } else {
         include = row.metric_date >= dateFrom && row.metric_date <= dateTo
       }
@@ -365,7 +401,7 @@ export default function OverviewPage() {
       })
       .sort((a, b) => b.value - a.value)
       .slice(0, 15)
-  }, [metrics, dealers, topPerformersKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
+  }, [monthlyAgg, rangeMetrics, dealers, topPerformersKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
 
   // ── Pie chart data ────────────────────────────────────────────────────────────
 
@@ -393,10 +429,11 @@ export default function OverviewPage() {
         .filter((e) => e.value > 0)
         .sort((a, b) => b.value - a.value)
     } else {
-      metrics.forEach((row: any) => {
+      const rows = viewMode === 'monthly' ? monthlyAgg : rangeMetrics
+      rows.forEach((row: any) => {
         let include = false
         if (viewMode === 'monthly') {
-          include = selectedChartMonth === 'all' || row.metric_date?.startsWith(selectedChartMonth)
+          include = selectedChartMonth === 'all' || row.month === selectedChartMonth
         } else {
           include = row.metric_date >= dateFrom && row.metric_date <= dateTo
         }
@@ -410,7 +447,7 @@ export default function OverviewPage() {
         .filter((e) => e.value > 0)
         .sort((a, b) => b.value - a.value)
     }
-  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
+  }, [monthlyAgg, rangeMetrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
 
   const tierPieData = useMemo((): { name: string; value: number }[] => {
     const agg: Record<string, number> = {}
@@ -436,10 +473,11 @@ export default function OverviewPage() {
         .filter((e) => e.value > 0)
         .sort((a, b) => b.value - a.value)
     } else {
-      metrics.forEach((row: any) => {
+      const rows = viewMode === 'monthly' ? monthlyAgg : rangeMetrics
+      rows.forEach((row: any) => {
         let include = false
         if (viewMode === 'monthly') {
-          include = selectedChartMonth === 'all' || row.metric_date?.startsWith(selectedChartMonth)
+          include = selectedChartMonth === 'all' || row.month === selectedChartMonth
         } else {
           include = row.metric_date >= dateFrom && row.metric_date <= dateTo
         }
@@ -453,7 +491,7 @@ export default function OverviewPage() {
         .filter((e) => e.value > 0)
         .sort((a, b) => b.value - a.value)
     }
-  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
+  }, [monthlyAgg, rangeMetrics, overviewCalls, dealersMap, selectedKpi, selectedChartMonth, viewMode, dateFrom, dateTo])
 
   // ── State bar chart data (by month) ────────────────────────────────────────
 
@@ -505,8 +543,9 @@ export default function OverviewPage() {
         missed: missedAgg[m.key],
       }))
     } else {
-      metrics.forEach((row: any) => {
-        const monthKey = row.metric_date?.substring(0, 7)
+      const rows = viewMode === 'monthly' ? monthlyAgg : rangeMetrics
+      rows.forEach((row: any) => {
+        const monthKey = viewMode === 'monthly' ? row.month : row.metric_date?.substring(0, 7)
         if (!monthKey || !agg.hasOwnProperty(monthKey)) return
         let include = false
         if (viewMode === 'monthly') {
@@ -525,10 +564,15 @@ export default function OverviewPage() {
         value: agg[m.key],
       }))
     }
-  }, [metrics, overviewCalls, dealersMap, selectedKpi, selectedState, viewMode, dateFrom, dateTo])
+  }, [monthlyAgg, rangeMetrics, overviewCalls, dealersMap, selectedKpi, selectedState, viewMode, dateFrom, dateTo])
 
   // Top 15 dealers (alphabetical) as placeholder
   const top15Dealers = useMemo(() => dealers.slice(0, 15), [dealers])
+
+  // Charts show a loading state during the initial mount fetch AND during the lazy
+  // Date Range raw fetch (first switch into Date Range), so they never flash a
+  // misleading "No data for selected period" while rangeMetrics is still in flight.
+  const chartsLoading = loading || (viewMode === 'daterange' && rangeLoading)
 
   const totalZone = zonePieData.reduce((s, d) => s + d.value, 0)
   const totalTier = tierPieData.reduce((s, d) => s + d.value, 0)
@@ -746,7 +790,7 @@ export default function OverviewPage() {
         </div>
 
         {/* Two pie charts */}
-        {loading ? (
+        {chartsLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div className="bg-slate-100 animate-pulse rounded-xl h-72" />
             <div className="bg-slate-100 animate-pulse rounded-xl h-72" />
@@ -863,7 +907,7 @@ export default function OverviewPage() {
             </select>
           </div>
 
-          {loading ? (
+          {chartsLoading ? (
             <div className="bg-slate-100 animate-pulse rounded-xl h-64" />
           ) : stateBarData.length === 0 ? (
             <div className="flex items-center justify-center h-48 text-sm text-slate-400">
