@@ -96,6 +96,23 @@ function groupCampaigns(rows: any[]) {
   }))
 }
 
+// Same aggregate formula CampaignTable uses internally for its "Results from N
+// campaigns" row (totalSpend/totalClicks/totalImpressions/summaryCtr/summaryCpc) —
+// hoisted here so the platform share chart + cards can reuse the identical sums
+// without a second data path. Always fed the same googleCampaigns/facebookCampaigns/
+// instagramCampaigns arrays already passed to the tables.
+function platformTotals(campaigns: ReturnType<typeof groupCampaigns>) {
+  const spend = campaigns.reduce((s, c) => s + c.spend, 0)
+  const clicks = campaigns.reduce((s, c) => s + c.clicks, 0)
+  const impressions = campaigns.reduce((s, c) => s + c.impressions, 0)
+  const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0
+  const cpc = clicks > 0 ? spend / clicks : 0
+  const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0
+  return { spend, clicks, impressions, ctr, cpc, cpm }
+}
+
+const PLATFORM_COLORS = { google: '#2a78d6', facebook: '#1baf7a', instagram: '#e34948' } as const
+
 // Derive the KPI-strip totals from get_metrics_summary rows (one row per platform).
 // Mirrors the original raw-row logic exactly: spend summed across ALL platforms;
 // impressions/clicks only from google/facebook/instagram; website visits only from ga4.
@@ -300,6 +317,172 @@ function chipDate(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
+// ─── Platform-wise visualization (cards first, share charts below) ───────────
+// Pure placement/visualization layer — every number here is a pass-through of
+// googleTotals/facebookTotals/instagramTotals (identical formula to the campaign
+// table's own aggregate row) and the existing tableReach state. No new fetch,
+// no new metric math.
+
+const PLATFORM_SHARE_ROWS: { key: 'spend' | 'clicks' | 'impressions'; label: string }[] = [
+  { key: 'spend', label: 'Spend' },
+  { key: 'clicks', label: 'Clicks' },
+  { key: 'impressions', label: 'Impressions' },
+]
+
+function formatShareValue(key: 'spend' | 'clicks' | 'impressions', value: number): string {
+  return key === 'spend' ? formatCurrency(value) : formatMillions(value)
+}
+
+function PlatformShareCharts({
+  google, facebook, instagram,
+}: {
+  google: { spend: number; clicks: number; impressions: number }
+  facebook: { spend: number; clicks: number; impressions: number }
+  instagram: { spend: number; clicks: number; impressions: number }
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow p-5">
+      <div className="flex items-center justify-between mb-5">
+        <span className="text-sm font-semibold text-slate-800">Platform Share</span>
+        <div className="flex items-center gap-4">
+          {(['google', 'facebook', 'instagram'] as const).map((p) => (
+            <div key={p} className="flex items-center gap-1.5 text-[12px] text-slate-600">
+              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: PLATFORM_COLORS[p] }} />
+              <span className="capitalize">{p}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-4">
+        {PLATFORM_SHARE_ROWS.map(({ key, label }) => {
+          const g = google[key], f = facebook[key], i = instagram[key]
+          const total = g + f + i
+          const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0)
+          const segments = [
+            { platform: 'google', value: g, color: PLATFORM_COLORS.google },
+            { platform: 'facebook', value: f, color: PLATFORM_COLORS.facebook },
+            { platform: 'instagram', value: i, color: PLATFORM_COLORS.instagram },
+          ]
+          return (
+            <div key={key}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</span>
+                {total === 0 && <span className="text-xs text-slate-400">No data</span>}
+              </div>
+              {total > 0 && (
+                <div className="flex items-center gap-4 mb-1.5">
+                  {segments.map((s) => s.value > 0 && (
+                    <span key={s.platform} className="flex items-center gap-1.5 text-[12px] text-slate-700">
+                      <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: s.color }} />
+                      <span className="font-medium">{formatShareValue(key, s.value)}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex h-6 w-full rounded-md overflow-hidden bg-slate-100">
+                {total === 0 ? null : segments.map((s, idx) => (
+                  s.value > 0 && (
+                    <div
+                      key={s.platform}
+                      className="h-full flex items-center justify-center text-[10px] font-medium text-white"
+                      style={{
+                        width: `${pct(s.value)}%`,
+                        backgroundColor: s.color,
+                        marginLeft: idx > 0 ? '2px' : 0,
+                      }}
+                      title={`${s.platform}: ${pct(s.value).toFixed(1)}%`}
+                    >
+                      {pct(s.value) >= 8 ? `${pct(s.value).toFixed(0)}%` : ''}
+                    </div>
+                  )
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function PlatformCard({
+  platform, label, color, budget, spend, clicks, impressions, ctr, cpc, cpm, showCpm, reach, reachLoading,
+  isAllDealers, campaignCount, singleCampaign, dealerStatus,
+}: {
+  platform: string
+  label: string
+  color: string
+  budget: number
+  spend: number
+  clicks: number
+  impressions: number
+  ctr: number
+  cpc: number
+  cpm: number
+  // Mirrors CampaignTable's own showCpm convention: false → Google (CPC, spend
+  // is click-billed), true → Meta platforms (CPM, spend is impression-billed).
+  showCpm: boolean
+  reach?: number | null
+  reachLoading?: boolean
+  // Campaign identity block — same aggregate-vs-single-campaign branching the
+  // (now-removed) campaign table used: "All Dealers" or multiple campaigns on
+  // this platform → "N campaigns" placeholder; exactly one campaign → its own
+  // name/status/period, dealerStatus being a dealer-level field (not per-campaign).
+  isAllDealers: boolean
+  campaignCount: number
+  singleCampaign: { name: string; startDate: string | null; endDate: string | null } | null
+  dealerStatus: string | null | undefined
+}) {
+  const Row = ({ label, value }: { label: string; value: ReactNode }) => (
+    <div className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-b-0">
+      <span className="text-xs text-slate-500">{label}</span>
+      <span className="text-sm font-medium text-slate-800">{value}</span>
+    </div>
+  )
+  const showSingle = !isAllDealers && singleCampaign !== null
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+        <span className="text-sm font-semibold text-slate-800">{label}</span>
+      </div>
+      <div className="mb-3 pb-3 border-b border-slate-100">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm text-slate-700 font-medium truncate" title={showSingle ? singleCampaign!.name : undefined}>
+            {showSingle ? singleCampaign!.name : <span className="text-slate-500 italic">{campaignCount} campaigns</span>}
+          </span>
+          {showSingle ? <StatusBadge status={dealerStatus} /> : <span className="text-slate-400 text-xs">—</span>}
+        </div>
+        <div className="text-xs text-slate-400 mt-1">
+          {showSingle && singleCampaign!.startDate && singleCampaign!.endDate
+            ? formatPeriod(singleCampaign!.startDate, singleCampaign!.endDate)
+            : '—'}
+        </div>
+      </div>
+      <Row label="Budget" value={budget > 0 ? formatCurrency(budget) : <span className="text-slate-400">—</span>} />
+      <Row label="Spend" value={formatCurrency(spend)} />
+      <Row label="Clicks" value={formatMillions(clicks)} />
+      <Row label="Impressions" value={formatMillions(impressions)} />
+      {reach !== undefined && (
+        <Row
+          label="Reach"
+          value={
+            reachLoading
+              ? <span className="inline-block h-3 w-3 rounded-full border-2 border-slate-300 border-t-indigo-500 animate-spin" />
+              : reach == null
+                ? <span className="text-slate-400">—</span>
+                : formatMillions(reach)
+          }
+        />
+      )}
+      <Row label="CTR %" value={`${ctr.toFixed(2)}%`} />
+      {showCpm
+        ? <Row label="CPM ₹" value={`₹${cpm.toFixed(2)}`} />
+        : <Row label="CPC ₹" value={`₹${cpc.toFixed(2)}`} />}
+    </div>
+  )
+}
+
 // ─── Shared modal shell (backdrop + outside-click-to-close) ───────────────────
 // Callers own their own header/close-button styling — this only owns the
 // overlay, centering, and click-outside behavior so it isn't duplicated
@@ -350,264 +533,6 @@ const KPI_GLOSSARY: { label: string; definition: string }[] = [
   { label: 'Calls', definition: 'Total phone calls received on your tracked number, broken down into Answered, Missed, and Dialled (attempted).' },
   { label: 'Budget', definition: 'The planned ad spend allocated to a campaign or platform for the selected period.' },
 ]
-
-// ─── Table style constants ────────────────────────────────────────────────────
-
-const TH = 'text-xs uppercase text-slate-400 font-medium px-4 py-3 text-right whitespace-nowrap'
-const TD = 'px-4 py-3 text-slate-700 border-b border-slate-50 text-right text-sm'
-
-// ─── Campaign accordion card (mobile/tablet, <xl) ─────────────────────────────
-
-function CampaignAccordionCard({
-  name,
-  status,
-  period,
-  budget,
-  clicks,
-  impressions,
-  reach,
-  reachTitle,
-  ctr,
-  metricLabel,
-  metricValue,
-  spend,
-}: {
-  name: ReactNode
-  status: ReactNode
-  period: ReactNode
-  budget: ReactNode
-  clicks: string
-  impressions: string
-  reach?: ReactNode
-  reachTitle?: string
-  ctr: string
-  metricLabel: string
-  metricValue: string
-  spend: string
-}) {
-  const Row = ({ label, value, title }: { label: string; value: ReactNode; title?: string }) => (
-    <div className="flex items-center justify-between gap-3 py-2 border-b border-slate-100 last:border-b-0" title={title}>
-      <span className="text-xs uppercase text-slate-400 font-medium flex-shrink-0">{label}</span>
-      <span className="text-sm text-slate-700 text-right truncate">{value}</span>
-    </div>
-  )
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <Row label="Campaign Name" value={name} />
-      <Row label="Status" value={status} />
-      <Row label="Period" value={period} />
-      <Row label="Budget" value={budget} />
-      <Row label="Link Clicks" value={clicks} />
-      <Row label="Impressions" value={impressions} />
-      {reach !== undefined && <Row label="Reach" value={reach} title={reachTitle} />}
-      <Row label="CTR %" value={`${ctr}%`} />
-      <Row label={metricLabel} value={`₹${metricValue}`} />
-      <Row label="Spend ₹" value={spend} />
-    </div>
-  )
-}
-
-// ─── Campaign table component ─────────────────────────────────────────────────
-
-function CampaignTable({
-  campaigns,
-  dealerStatus,
-  showCpm,
-  isAllDealers,
-  budgetInr,
-  reachValue,
-  showReachLabel,
-  liveReach,
-  reachLoading,
-  platformKey,
-}: {
-  campaigns: ReturnType<typeof groupCampaigns>
-  dealerStatus: string | null | undefined
-  showCpm: boolean
-  isAllDealers: boolean
-  budgetInr?: number
-  reachValue?: number
-  showReachLabel?: boolean
-  // Live Meta API reach (Rule B path): undefined = not in live mode, fall
-  // back to the legacy reachValue rendering below unchanged. null = live
-  // call returned an error. number (incl. 0) = a real fetched value.
-  liveReach?: number | null
-  reachLoading?: boolean
-  platformKey: string
-}) {
-  if (campaigns.length === 0) {
-    return (
-      <div className="text-center py-12 text-slate-400 text-sm">No data for selected period</div>
-    )
-  }
-
-  // Summary totals used for the all-dealers aggregated row
-  const totalImpressions = campaigns.reduce((s, c) => s + c.impressions, 0)
-  const totalClicks = campaigns.reduce((s, c) => s + c.clicks, 0)
-  const totalSpend = campaigns.reduce((s, c) => s + c.spend, 0)
-  const summaryCtr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : '0.00'
-  const summaryCpc = totalClicks > 0 ? (totalSpend / totalClicks).toFixed(2) : '0.00'
-  const summaryCpm = totalImpressions > 0 ? ((totalSpend / totalImpressions) * 1000).toFixed(2) : '0.00'
-  const campaignCount = campaigns.length
-
-  // Reach cell content: loading spinner > live-fetch result (Rule B) >
-  // legacy reachValue rendering (untouched — same condition/output as before).
-  function renderReachCell() {
-    if (showReachLabel === false) return ''
-    if (reachLoading) {
-      return <span className="inline-block h-3 w-3 rounded-full border-2 border-slate-300 border-t-indigo-500 animate-spin" />
-    }
-    if (liveReach !== undefined) {
-      return liveReach === null
-        ? <span className="text-slate-400">—</span>
-        : <span className="text-slate-700 font-medium">{formatMillions(liveReach)}</span>
-    }
-    return reachValue && reachValue > 0 ? (
-      <span className="text-slate-700 font-medium">{formatMillions(reachValue)}</span>
-    ) : (
-      <span className="text-slate-400">—*</span>
-    )
-  }
-
-  function reachCellTitle(): string | undefined {
-    if (showReachLabel === false || reachLoading) return undefined
-    if (liveReach !== undefined) {
-      return liveReach === null ? "Reach unavailable — check connection" : undefined
-    }
-    return !reachValue ? "Live Meta API — coming soon" : undefined
-  }
-
-  return (
-    <>
-    <table className="hidden xl:table w-full text-sm" style={{ tableLayout: 'fixed', minWidth: '1080px' }}>
-      <colgroup>
-        <col style={{ width: '260px' }} />
-        <col style={{ width: '80px' }} />
-        <col style={{ width: '110px' }} />
-        <col style={{ width: '90px' }} />
-        <col style={{ width: '90px' }} />
-        <col style={{ width: '100px' }} />
-        <col style={{ width: '80px' }} />
-        <col style={{ width: '80px' }} />
-        <col style={{ width: '90px' }} />
-        <col style={{ width: '100px' }} />
-      </colgroup>
-      <thead>
-        <tr className="bg-slate-50">
-          <th className={`${TH} text-center`}>Campaign Name</th>
-          <th className={`${TH} text-center`}>Status</th>
-          <th className={`${TH} text-center`}>Period</th>
-          <th className={`${TH} text-center`}>Budget</th>
-          <th className={`${TH} text-center`}>Link Clicks</th>
-          <th className={`${TH} text-center`}>Impressions</th>
-          <th className={`${TH} text-center`}>
-            {showReachLabel !== false ? 'Reach' : ''}
-          </th>
-          <th className={`${TH} text-center`}>CTR %</th>
-          <th className={`${TH} text-center`}>{showCpm ? 'CPM ₹' : 'CPC ₹'}</th>
-          <th className={`${TH} text-center`}>Spend ₹</th>
-        </tr>
-      </thead>
-      <tbody>
-        {isAllDealers ? (
-          // All Dealers mode: single aggregated summary row
-          <tr className="hover:bg-slate-50 transition-colors">
-            <td className={`${TD} text-center`}>
-              <span className="text-slate-500 italic">{campaignCount} campaigns</span>
-            </td>
-            <td className={`${TD} text-center`}><span className="text-slate-400">—</span></td>
-            <td className={`${TD} text-center`}><span className="text-slate-400">—</span></td>
-            <td className={`${TD} text-center`}>
-              {budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
-            </td>
-            <td className={`${TD} text-center`}>{formatMillions(totalClicks)}</td>
-            <td className={`${TD} text-center`}>{formatMillions(totalImpressions)}</td>
-            <td className={`${TD} text-center`} title={reachCellTitle()}>
-              {renderReachCell()}
-            </td>
-            <td className={`${TD} text-center`}>{summaryCtr}%</td>
-            <td className={`${TD} text-center`}>₹{showCpm ? summaryCpm : summaryCpc}</td>
-            <td className={`${TD} text-center`}>{formatCurrency(totalSpend)}</td>
-          </tr>
-        ) : (
-          // Single dealer mode: one row per campaign
-          campaigns.map((c, i) => (
-            <tr key={i} className="hover:bg-slate-50 transition-colors">
-              <td className={`${TD} text-center font-medium text-slate-900 truncate max-w-0`}>
-                <span className="block truncate" title={c.name}>{c.name}</span>
-              </td>
-              <td className={`${TD} text-center`}>
-                <StatusBadge status={dealerStatus} />
-              </td>
-              <td className={`${TD} text-center`}>
-                {c.startDate && c.endDate ? (
-                  <span className="text-slate-700 text-xs">{formatPeriod(c.startDate, c.endDate)}</span>
-                ) : (
-                  <span className="text-slate-400">—</span>
-                )}
-              </td>
-              <td className={`${TD} text-center`}>
-                {budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
-              </td>
-              <td className={`${TD} text-center`}>{formatNumber(c.clicks)}</td>
-              <td className={`${TD} text-center`}>{formatMillions(c.impressions)}</td>
-              <td className={`${TD} text-center`} title={reachCellTitle()}>
-                {renderReachCell()}
-              </td>
-              <td className={`${TD} text-center`}>{c.ctr}%</td>
-              <td className={`${TD} text-center`}>₹{showCpm ? c.cpm : c.cpc}</td>
-              <td className={`${TD} text-center`}>{formatCurrency(c.spend)}</td>
-            </tr>
-          ))
-        )}
-      </tbody>
-    </table>
-
-    <div className="xl:hidden space-y-3">
-      {isAllDealers ? (
-        <CampaignAccordionCard
-          key={`${platformKey}-summary`}
-          name={<span className="text-slate-500 italic">{campaignCount} campaigns</span>}
-          status={<span className="text-slate-400">—</span>}
-          period={<span className="text-slate-400">—</span>}
-          budget={budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
-          clicks={formatMillions(totalClicks)}
-          impressions={formatMillions(totalImpressions)}
-          reach={showReachLabel !== false ? renderReachCell() : undefined}
-          reachTitle={reachCellTitle()}
-          ctr={summaryCtr}
-          metricLabel={showCpm ? 'CPM ₹' : 'CPC ₹'}
-          metricValue={showCpm ? summaryCpm : summaryCpc}
-          spend={formatCurrency(totalSpend)}
-        />
-      ) : (
-        campaigns.map((c, i) => (
-          <CampaignAccordionCard
-            key={`${platformKey}-${i}`}
-            name={<span title={c.name}>{c.name}</span>}
-            status={<StatusBadge status={dealerStatus} />}
-            period={
-              c.startDate && c.endDate
-                ? formatPeriod(c.startDate, c.endDate)
-                : <span className="text-slate-400">—</span>
-            }
-            budget={budgetInr && budgetInr > 0 ? formatCurrency(budgetInr) : <span className="text-slate-400">—</span>}
-            clicks={formatNumber(c.clicks)}
-            impressions={formatMillions(c.impressions)}
-            reach={showReachLabel !== false ? renderReachCell() : undefined}
-            reachTitle={reachCellTitle()}
-            ctr={c.ctr}
-            metricLabel={showCpm ? 'CPM ₹' : 'CPC ₹'}
-            metricValue={showCpm ? c.cpm : c.cpc}
-            spend={formatCurrency(c.spend)}
-          />
-        ))
-      )}
-    </div>
-    </>
-  )
-}
 
 // ─── Creative carousel component ──────────────────────────────────────────────
 
@@ -696,15 +621,12 @@ export default function DealersPage() {
   const [selectedDealerId, setSelectedDealerId] = useState('')
   // Server-aggregated sources (replace the old raw full-table fetch):
   //   summaryRows  — one row per platform (get_metrics_summary) → KPI strip + conversions
-  //   campaignRows — one row per (campaign_name, platform) (get_campaign_summary) → 3 ad tables
-  //   singleDayRows — raw fb/ig rows, lazily fetched ONLY when a single day is selected,
-  //                   the one case reachByPlatform needs row-level reach.
+  //   campaignRows — one row per (campaign_name, platform) (get_campaign_summary) → platform cards
   const [summaryRows, setSummaryRows] = useState<any[]>([])
   const [campaignRows, setCampaignRows] = useState<any[]>([])
   // (dealer_id, month, platform) grain from the fast month-grain RPC — powers the trend line chart.
   const [monthlyRows, setMonthlyRows] = useState<any[]>([])
   const [lineMetric, setLineMetric] = useState('driving_directions')
-  const [singleDayRows, setSingleDayRows] = useState<any[]>([])
   const [pptLoading, setPptLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   // Single date filter driving the whole page — presets + calendar. Default = All time.
@@ -722,8 +644,9 @@ export default function DealersPage() {
   const [reachData, setReachData] = useState<Awaited<ReturnType<typeof getReach>>>(null)
   const [reachLoading, setReachLoading] = useState(true)
 
-  // Live Meta reach — FB/IG table columns (multi-day range or "all dealers" only;
-  // single-dealer + single-day case keeps the existing reachByPlatform mechanism)
+  // Live Meta reach — feeds the Facebook/Instagram platform cards' Reach row.
+  // Skipped (null, not loading) for the single-dealer + single-day combination —
+  // no separate raw-row fallback for that edge case (see the effect below).
   const [tableReach, setTableReach] = useState<{
     facebook: { value: number | null; loading: boolean }
     instagram: { value: number | null; loading: boolean }
@@ -822,36 +745,6 @@ export default function DealersPage() {
 
   const isSingleDay = useMemo(() => range.from === range.to, [range])
 
-  // Single-day-only Rule B reach: row-level daily_metrics.reach for a single dealer on a
-  // single day. summaryRows/campaignRows carry no reach column, so this reads the lazily
-  // fetched singleDayRows (populated only when isSingleDay — see the effect below).
-  const reachByPlatform = useMemo(() => {
-    if (!isSingleDay) return { facebook: 0, instagram: 0 }
-    let facebook = 0
-    let instagram = 0
-    singleDayRows.forEach((m: any) => {
-      if (m.platform === 'facebook') facebook += m.reach || 0
-      if (m.platform === 'instagram') instagram += m.reach || 0
-    })
-    return { facebook, instagram }
-  }, [singleDayRows, isSingleDay])
-
-  // Lazy raw fetch for the single-day reach case ONLY. Never fires on the default
-  // All-Months view (isSingleDay is false whenever from !== to). Scoped to fb/ig — the
-  // only platforms reachByPlatform reads — so it's ~a few hundred rows / one fast page.
-  useEffect(() => {
-    if (!isSingleDay || dealers.length === 0) {
-      setSingleDayRows([])
-      return
-    }
-    let cancelled = false
-    const ids = selectedDealerId ? [selectedDealerId] : dealers.map((d: any) => d.id)
-    getMetrics(ids, range.from, range.to, ['facebook', 'instagram']).then((data) => {
-      if (!cancelled) setSingleDayRows(data)
-    })
-    return () => { cancelled = true }
-  }, [isSingleDay, dealers, selectedDealerId, range])
-
   // Filtered Reach KPI card — ALWAYS a live call (Rule A: combined KPI
   // never uses stored data), scoped to the current filter state. All roles now
   // get filter-reactive reach (admin, branch_head, dealer).
@@ -869,9 +762,9 @@ export default function DealersPage() {
     return () => { cancelled = true }
   }, [isRestrictedRole, selectedDealerId, range])
 
-  // FB/IG table Reach columns — Rule B: single dealer + single day keeps the
-  // existing reachByPlatform mechanism (daily_metrics.reach) untouched; every
-  // other combination (multi-day range, or "all dealers") makes a live call.
+  // Facebook/Instagram platform card Reach — single dealer + single day skips
+  // the live call (null, not loading); every other combination (multi-day
+  // range, or "all dealers") makes a live call.
   useEffect(() => {
     const useLiveFetch = !(selectedDealerId && isSingleDay)
     if (!useLiveFetch) {
@@ -919,6 +812,14 @@ export default function DealersPage() {
     () => groupCampaigns(campaignRows.filter((m: any) => m.platform === 'instagram')),
     [campaignRows]
   )
+
+  // Per-platform Spend/Clicks/Impressions/CTR/CPC — identical formula to each
+  // CampaignTable's own aggregate row, computed from the same campaigns arrays.
+  // Feeds the platform share charts + cards below; the tables' own totals stay
+  // exactly as they are (each table still does this reduce internally too).
+  const googleTotals = useMemo(() => platformTotals(googleCampaigns), [googleCampaigns])
+  const facebookTotals = useMemo(() => platformTotals(facebookCampaigns), [facebookCampaigns])
+  const instagramTotals = useMemo(() => platformTotals(instagramCampaigns), [instagramCampaigns])
 
   // Conversions from get_metrics_summary rows (one per platform). Same platform/field
   // selection as the original raw-row logic: gmb → directions/store visits; ga4 → website
@@ -1272,97 +1173,65 @@ export default function DealersPage() {
             </div>
           </div>
 
-          {/* ── Google Ads Table ── */}
-          {googleCampaigns.length > 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
-                  <span className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                    G
-                  </span>
-                  <span className="text-sm font-semibold text-slate-800">Google Ads</span>
-                </div>
-                <span className="text-xs text-slate-400">Campaign performance for selected period</span>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <CampaignTable
-                campaigns={googleCampaigns}
-                dealerStatus={selectedDealer?.campaign_status}
-                showCpm={false}
-                isAllDealers={!selectedDealerId}
-                budgetInr={googleBudget}
-                showReachLabel={false}
-                reachValue={undefined}
-                platformKey="google"
-              />
-            </div>
+          {/* ── Platform-wise visualization: platform cards first, share charts below (clear barrier between raw numbers and infographics) ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <PlatformCard
+              platform="google"
+              label="Google"
+              color={PLATFORM_COLORS.google}
+              budget={googleBudget}
+              spend={googleTotals.spend}
+              clicks={googleTotals.clicks}
+              impressions={googleTotals.impressions}
+              ctr={googleTotals.ctr}
+              cpc={googleTotals.cpc}
+              cpm={googleTotals.cpm}
+              showCpm={false}
+              isAllDealers={!selectedDealerId}
+              campaignCount={googleCampaigns.length}
+              singleCampaign={googleCampaigns.length === 1 ? googleCampaigns[0] : null}
+              dealerStatus={selectedDealer?.campaign_status}
+            />
+            <PlatformCard
+              platform="facebook"
+              label="Facebook"
+              color={PLATFORM_COLORS.facebook}
+              budget={facebookBudget}
+              spend={facebookTotals.spend}
+              clicks={facebookTotals.clicks}
+              impressions={facebookTotals.impressions}
+              ctr={facebookTotals.ctr}
+              cpc={facebookTotals.cpc}
+              cpm={facebookTotals.cpm}
+              showCpm={true}
+              reach={tableReach.facebook.value}
+              reachLoading={tableReach.facebook.loading}
+              isAllDealers={!selectedDealerId}
+              campaignCount={facebookCampaigns.length}
+              singleCampaign={facebookCampaigns.length === 1 ? facebookCampaigns[0] : null}
+              dealerStatus={selectedDealer?.campaign_status}
+            />
+            <PlatformCard
+              platform="instagram"
+              label="Instagram"
+              color={PLATFORM_COLORS.instagram}
+              budget={instagramBudget}
+              spend={instagramTotals.spend}
+              clicks={instagramTotals.clicks}
+              impressions={instagramTotals.impressions}
+              ctr={instagramTotals.ctr}
+              cpc={instagramTotals.cpc}
+              cpm={instagramTotals.cpm}
+              showCpm={true}
+              reach={tableReach.instagram.value}
+              reachLoading={tableReach.instagram.loading}
+              isAllDealers={!selectedDealerId}
+              campaignCount={instagramCampaigns.length}
+              singleCampaign={instagramCampaigns.length === 1 ? instagramCampaigns[0] : null}
+              dealerStatus={selectedDealer?.campaign_status}
+            />
           </div>
-          )}
-
-          {/* ── Facebook Ads Table ── */}
-          {facebookCampaigns.length > 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
-                  <span className="w-5 h-5 rounded-full bg-[#1877F2] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                    f
-                  </span>
-                  <span className="text-sm font-semibold text-slate-800">Facebook Ads</span>
-                </div>
-                <span className="text-xs text-slate-400">Campaign performance for selected period</span>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <CampaignTable
-                campaigns={facebookCampaigns}
-                dealerStatus={selectedDealer?.campaign_status}
-                showCpm={true}
-                isAllDealers={!selectedDealerId}
-                budgetInr={facebookBudget}
-                showReachLabel={true}
-                reachValue={isSingleDay ? reachByPlatform.facebook : undefined}
-                liveReach={(selectedDealerId && isSingleDay) ? undefined : tableReach.facebook.value}
-                reachLoading={(selectedDealerId && isSingleDay) ? false : tableReach.facebook.loading}
-                platformKey="facebook"
-              />
-            </div>
-          </div>
-          )}
-
-          {/* ── Instagram Ads Table ── */}
-          {instagramCampaigns.length > 0 && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 border-l-4 border-indigo-500 pl-3">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)' }}>
-                    IG
-                  </span>
-                  <span className="text-sm font-semibold text-slate-800">Instagram Ads</span>
-                </div>
-                <span className="text-xs text-slate-400">Campaign performance for selected period</span>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <CampaignTable
-                campaigns={instagramCampaigns}
-                dealerStatus={selectedDealer?.campaign_status}
-                showCpm={true}
-                isAllDealers={!selectedDealerId}
-                budgetInr={instagramBudget}
-                showReachLabel={true}
-                reachValue={isSingleDay ? reachByPlatform.instagram : undefined}
-                liveReach={(selectedDealerId && isSingleDay) ? undefined : tableReach.instagram.value}
-                reachLoading={(selectedDealerId && isSingleDay) ? false : tableReach.instagram.loading}
-                platformKey="instagram"
-              />
-            </div>
-          </div>
-          )}
+          <PlatformShareCharts google={googleTotals} facebook={facebookTotals} instagram={instagramTotals} />
 
           {/* ── Conversions Section ── */}
           <div className="bg-white rounded-xl border border-slate-200 shadow p-6">
