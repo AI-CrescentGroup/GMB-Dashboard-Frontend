@@ -95,10 +95,12 @@ export function DateRangeFilter({
   value,
   onChange,
   className,
+  buttonClassName,
 }: {
   value: DateRange
   onChange: (r: DateRange) => void
   className?: string
+  buttonClassName?: string
 }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<DateRange>(value)
@@ -185,11 +187,11 @@ export function DateRangeFilter({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] text-slate-700 flex items-center gap-2 shadow-sm hover:border-indigo-300 transition"
+        className={`h-9 px-3 rounded-lg border border-slate-200 bg-white text-[13px] text-slate-700 flex items-center gap-2 shadow-sm hover:border-indigo-300 transition ${buttonClassName || ''}`}
       >
-        <Calendar size={15} className="text-indigo-500" />
+        <Calendar size={15} className="text-indigo-500 shrink-0" />
         <span className="font-medium whitespace-nowrap">{triggerLabel}</span>
-        <ChevronDown size={15} className="text-slate-400" />
+        <ChevronDown size={15} className="text-slate-400 shrink-0 ml-auto" />
       </button>
 
       {open && (

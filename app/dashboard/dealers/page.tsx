@@ -2,13 +2,17 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
-import { getDealers, getMetrics, getMetricsSummary, getCampaignSummary, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives, getReach } from '@/lib/queries'
+import {
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+} from 'recharts'
+import { getDealers, getMetrics, getMetricsSummary, getCampaignSummary, getMetricsByDealerMonth, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives, getReach } from '@/lib/queries'
 import { exportDealerPPT } from '@/lib/exportPPT'
 import { Select } from '@/components/ui/select'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter'
 import {
-  Download, Navigation, MapPin, Phone, Eye, Zap, TrendingUp, Activity, Camera, HelpCircle, X,
+  Download, Navigation, MapPin, TrendingUp, Activity, Camera, HelpCircle, X,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -168,6 +172,132 @@ function KpiCard({
       {note && <div className="text-xs text-slate-400 mt-1">{note}</div>}
     </div>
   )
+}
+
+// Small pill showing the currently-selected date range, top-right of each chart card.
+function RangeChip({ label }: { label: string }) {
+  return (
+    <span className="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-full px-2.5 py-1 whitespace-nowrap">
+      {label}
+    </span>
+  )
+}
+
+// Calls doughnut — Answered / Missed split, total shown as text beside the ring.
+// Reuses callTotals (no new fetch). call_metrics is month-grain, so a day-precise
+// range reflects the containing month(s), which is expected.
+function CallsDoughnut({
+  answered, missed, received, rangeLabel,
+}: { answered: number; missed: number; received: number; rangeLabel: string }) {
+  const data = [
+    { name: 'Answered', value: answered, color: '#1baf7a' },
+    { name: 'Missed', value: missed, color: '#e34948' },
+  ]
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow p-5 h-full">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-sm font-semibold text-slate-800">Calls</span>
+        <RangeChip label={rangeLabel} />
+      </div>
+      {received === 0 ? (
+        <div className="flex items-center justify-center h-[200px] text-sm text-slate-400">No call data</div>
+      ) : (
+        <div className="flex items-center gap-5">
+          <div className="w-[150px] h-[150px] shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={data} dataKey="value" innerRadius="62%" outerRadius="100%" paddingAngle={2} stroke="none">
+                  {data.map((d) => <Cell key={d.name} fill={d.color} />)}
+                </Pie>
+                <Tooltip formatter={(v: any, n: any) => [Number(v).toLocaleString('en-IN'), n]} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex flex-col gap-3">
+            <div>
+              <div className="text-[11px] text-slate-400 uppercase tracking-wide">Total calls</div>
+              <div className="text-2xl font-bold text-slate-900">{received.toLocaleString('en-IN')}</div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {data.map((d) => (
+                <div key={d.name} className="flex items-center gap-2 text-[13px]">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                  <span className="text-slate-600">{d.name}</span>
+                  <span className="text-slate-900 font-medium ml-auto">{d.value.toLocaleString('en-IN')}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const LINE_METRIC_OPTIONS = [
+  { value: 'driving_directions', label: 'Driving Directions' },
+  { value: 'website_visits', label: 'Website Visits' },
+  { value: 'link_clicks', label: 'Clicks' },
+  { value: 'impressions', label: 'Impressions' },
+] as const
+
+// Single-series monthly trend. y-axis compact; tooltip shows exact absolute value.
+function MetricLineChart({
+  series, metric, onMetric, rangeLabel,
+}: {
+  series: { month: string; value: number }[]
+  metric: string
+  onMetric: (m: string) => void
+  rangeLabel: string
+}) {
+  const metricLabel = LINE_METRIC_OPTIONS.find((o) => o.value === metric)?.label ?? metric
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow p-5 h-full">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <Select
+          value={metric}
+          onChange={(e) => onMetric(e.target.value)}
+          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none"
+        >
+          {LINE_METRIC_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </Select>
+        <RangeChip label={rangeLabel} />
+      </div>
+      {series.length === 0 ? (
+        <div className="flex items-center justify-center h-[240px] text-sm text-slate-400">No data for selected period</div>
+      ) : (
+        <ResponsiveContainer width="100%" height={240}>
+          <LineChart data={series} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+            <YAxis tickFormatter={(v: number) => compactAxis(v)} tick={{ fontSize: 11, fill: '#94a3b8' }} width={52} />
+            <Tooltip formatter={(v: any) => [Number(v).toLocaleString('en-IN'), metricLabel]} />
+            <Line type="monotone" dataKey="value" stroke="#2a78d6" strokeWidth={2} dot={{ r: 3, fill: '#2a78d6' }} activeDot={{ r: 5 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
+// Compact axis ticks: 12.3M / 45.6K / 789.
+function compactAxis(val: number): string {
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`
+  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}K`
+  return `${val}`
+}
+
+// "2025-10" → "Oct '25" for the x-axis.
+function monthShort(monthKey: string): string {
+  const d = new Date(monthKey + '-01T00:00:00')
+  return `${d.toLocaleDateString('en-US', { month: 'short' })} '${String(d.getFullYear()).slice(2)}`
+}
+
+// "2025-05-28" → "28 May" for the range chip.
+function chipDate(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
 // ─── Shared modal shell (backdrop + outside-click-to-close) ───────────────────
@@ -571,6 +701,9 @@ export default function DealersPage() {
   //                   the one case reachByPlatform needs row-level reach.
   const [summaryRows, setSummaryRows] = useState<any[]>([])
   const [campaignRows, setCampaignRows] = useState<any[]>([])
+  // (dealer_id, month, platform) grain from the fast month-grain RPC — powers the trend line chart.
+  const [monthlyRows, setMonthlyRows] = useState<any[]>([])
+  const [lineMetric, setLineMetric] = useState('driving_directions')
   const [singleDayRows, setSingleDayRows] = useState<any[]>([])
   const [pptLoading, setPptLoading] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -629,13 +762,16 @@ export default function DealersPage() {
       setLoading(true)
       try {
         const ids = selectedDealerId ? [selectedDealerId] : dealers.map((d: any) => d.id)
-        const [summary, campaigns] = await Promise.all([
+        const [summary, campaigns, monthly] = await Promise.all([
           getMetricsSummary(ids, range.from, range.to, []),
           getCampaignSummary(ids, range.from, range.to),
+          // Fast month-grain RPC (NOT a raw daily_metrics scan) for the trend line chart.
+          getMetricsByDealerMonth(ids, range.from, range.to, []),
         ])
         if (!cancelled) {
           setSummaryRows(summary)
           setCampaignRows(campaigns)
+          setMonthlyRows(monthly)
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -816,6 +952,30 @@ export default function DealersPage() {
     return { received, answered, missed, dialled }
   }, [callMetrics])
 
+  // Monthly trend series for the line chart — summed across dealers per month. The
+  // per-platform metric selection mirrors the KPI totals (kpiFromSummary/conversions)
+  // exactly, so the chart reconciles with the stat cards and campaign tables.
+  const lineSeries = useMemo(() => {
+    const byMonth: Record<string, number> = {}
+    const months = new Set<string>()
+    monthlyRows.forEach((r: any) => {
+      months.add(r.month)
+      let v = 0
+      if (lineMetric === 'driving_directions') {
+        if (r.platform === 'gmb') v = r.driving_directions || 0
+      } else if (lineMetric === 'website_visits') {
+        if (r.platform === 'ga4') v = r.website_visits || 0
+      } else if (r.platform === 'google' || r.platform === 'facebook' || r.platform === 'instagram') {
+        // link_clicks / impressions → paid platforms only
+        v = (lineMetric === 'link_clicks' ? r.link_clicks : r.impressions) || 0
+      }
+      byMonth[r.month] = (byMonth[r.month] || 0) + v
+    })
+    return [...months].sort().map((m) => ({ month: monthShort(m), value: byMonth[m] || 0 }))
+  }, [monthlyRows, lineMetric])
+
+  const rangeChip = `${chipDate(range.from)} – ${chipDate(range.to)}`
+
   // call_metrics is one row per dealer per month. In any multi-dealer scope
   // (all dealers, or a branch_head's assigned subset) callMetrics holds many
   // rows per month, so the Call Summary table must sum every dealer's row
@@ -849,6 +1009,15 @@ export default function DealersPage() {
   const instagramBudget = useMemo(() =>
     budgets
       .filter((b: any) => b.platform === 'instagram')
+      .reduce((s: number, b: any) => s + (b.budget_inr || 0), 0),
+    [budgets]
+  )
+
+  // Static full-year planned figure — mirrors Overview's Spend vs Planned pattern.
+  // Does not react to the date filter (only spend does).
+  const totalPlannedBudget = useMemo(() =>
+    budgets
+      .filter((b: any) => b.platform === 'total')
       .reduce((s: number, b: any) => s + (b.budget_inr || 0), 0),
     [budgets]
   )
@@ -999,42 +1168,71 @@ export default function DealersPage() {
         <span className="text-xs text-slate-400">Updated till: {latestDate}</span>
       </div>
 
-      {/* ── Filter Bar ── */}
-      <div className="flex flex-wrap items-end gap-3 mb-6 bg-white rounded-xl border border-slate-200 shadow px-5 py-4">
+      {/* ── Top row: 3 stat cards (left) + control stack (right) ── */}
+      <div className="flex flex-col lg:flex-row gap-4 mb-4">
+        {/* Stat cards: Total Spend/Planned · Store Visits · Reach */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 content-start">
+          {loading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="bg-slate-100 animate-pulse rounded-xl h-[104px]" />
+            ))
+          ) : (
+            <>
+              <KpiCard
+                icon={<TrendingUp size={16} className="text-indigo-500" />}
+                label="Total Spend"
+                value={totalPlannedBudget > 0
+                  ? `${formatCurrency(kpi.totalSpend)} / ${formatCurrency(totalPlannedBudget)}`
+                  : '—'}
+                subtitle={totalPlannedBudget === 0
+                  ? 'No budget data'
+                  : `${((kpi.totalSpend / totalPlannedBudget) * 100).toFixed(1)}% of planned budget`}
+              />
+              <KpiCard
+                icon={<MapPin size={16} className="text-emerald-500" />}
+                label="Store Visits"
+                value={formatNumber(conversions.storeVisits)}
+              />
+              <KpiCard
+                icon={<Activity size={16} className="text-slate-300" />}
+                label="Reach"
+                value={
+                  reachLoading ? '…'
+                  : reachData?.reach == null ? '—'
+                  : formatMillions(reachData.reach)
+                }
+                note={
+                  reachLoading ? undefined
+                  : reachData?.reach == null ? 'Reach unavailable'
+                  : reachData.dealers_covered < reachData.dealers_requested
+                    ? `${reachData.dealers_covered}/${reachData.dealers_requested} dealers`
+                    : undefined
+                }
+                title={!reachLoading && reachData?.reach == null ? 'Reach unavailable — check connection' : undefined}
+              />
+            </>
+          )}
+        </div>
 
-        {/* Dealer select — hidden for dealer role (auto-selected from auth) */}
-        {role !== 'dealer' && (
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Select Dealer
-            </label>
+        {/* Control stack — Select Dealer (unless dealer role) → Date filter → Download PPT */}
+        <div className="flex flex-col gap-2 lg:w-[280px] shrink-0">
+          {role !== 'dealer' && (
             <Select
               value={selectedDealerId}
               onChange={(e) => setSelectedDealerId(e.target.value)}
-              className="min-w-[280px] h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none"
+              className="w-full h-9 rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-indigo-400 focus:outline-none"
             >
               <option value="">-- All Dealers (Aggregated) --</option>
               {dealers.map((d: any) => (
                 <option key={d.id} value={d.id}>{d.dealer_name}</option>
               ))}
             </Select>
-          </div>
-        )}
-
-        {/* Date range filter — preset + calendar, plain top-right (label-less, like Overview) */}
-        <div className="ml-auto">
-          <DateRangeFilter value={range} onChange={setRange} />
-        </div>
-
-        {/* Download PPT */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide invisible">
-            Export
-          </label>
+          )}
+          <DateRangeFilter value={range} onChange={setRange} className="w-full" buttonClassName="w-full" />
           <button
             onClick={handleExportPPT}
             disabled={pptLoading}
-            className="h-9 px-3.5 rounded-lg text-[13px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            className="h-9 px-3.5 rounded-lg text-[13px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center justify-center gap-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Download size={15} />
             {pptLoading ? 'Generating…' : 'Download PPT'}
@@ -1042,67 +1240,36 @@ export default function DealersPage() {
         </div>
       </div>
 
-      {/* ── Loading skeleton ── */}
+      {/* ── Charts row + report content (loading-gated) ── */}
       {loading ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="bg-slate-100 animate-pulse rounded-xl h-24" />
-            ))}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="bg-slate-100 animate-pulse rounded-xl h-[260px] lg:col-span-1" />
+            <div className="bg-slate-100 animate-pulse rounded-xl h-[260px] lg:col-span-2" />
           </div>
-          <div className="bg-slate-100 animate-pulse rounded-xl h-48" />
           <div className="bg-slate-100 animate-pulse rounded-xl h-48" />
           <div className="bg-slate-100 animate-pulse rounded-xl h-48" />
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          {/* ── KPI Strip (filter-reactive, all roles) ── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <KpiCard
-              icon={<TrendingUp size={16} className="text-indigo-500" />}
-              label="Total Spend"
-              value={formatCurrency(kpi.totalSpend)}
-            />
-            <KpiCard
-              icon={<Eye size={16} className="text-blue-500" />}
-              label="Impressions"
-              value={formatMillions(kpi.totalImpressions)}
-            />
-            <KpiCard
-              icon={<Activity size={16} className="text-slate-300" />}
-              label="Reach"
-              value={
-                reachLoading ? '…'
-                : reachData?.reach == null ? '—'
-                : formatMillions(reachData.reach)
-              }
-              note={
-                reachLoading ? undefined
-                : reachData?.reach == null ? 'Reach unavailable'
-                : reachData.dealers_covered < reachData.dealers_requested
-                  ? `${reachData.dealers_covered}/${reachData.dealers_requested} dealers`
-                  : undefined
-              }
-              title={!reachLoading && reachData?.reach == null ? 'Reach unavailable — check connection' : undefined}
-            />
-            <KpiCard
-              icon={<Zap size={16} className="text-amber-500" />}
-              label="Link Clicks"
-              value={selectedDealerId ? formatNumber(kpi.totalClicks) : formatMillions(kpi.totalClicks)}
-            />
-            <KpiCard
-              icon={<Activity size={16} className="text-emerald-500" />}
-              label="Website Visits"
-              value={formatNumber(kpi.websiteVisits)}
-            />
-            <KpiCard
-              icon={<Phone size={16} className="text-emerald-500" />}
-              label="Calls"
-              value={callTotals.received > 0 ? formatNumber(callTotals.received) : '—'}
-              subtitle={callTotals.received > 0
-                ? `${Math.round((callTotals.answered / callTotals.received) * 100)}% answered (${formatNumber(callTotals.answered)})`
-                : 'No call data'}
-            />
+          {/* ── Charts row: Calls doughnut (narrow) + metric trend (wide, 1:2) ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-1">
+              <CallsDoughnut
+                answered={callTotals.answered}
+                missed={callTotals.missed}
+                received={callTotals.received}
+                rangeLabel={rangeChip}
+              />
+            </div>
+            <div className="lg:col-span-2">
+              <MetricLineChart
+                series={lineSeries}
+                metric={lineMetric}
+                onMetric={setLineMetric}
+                rangeLabel={rangeChip}
+              />
+            </div>
           </div>
 
           {/* ── Google Ads Table ── */}
