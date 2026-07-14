@@ -1240,70 +1240,72 @@ export default function DealersPage() {
               <span className="text-xs text-slate-400">Real-time conversion tracking</span>
             </div>
 
-            {/* Row 1: 2 KPI cards */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <KpiCard
-                icon={<Navigation size={16} className="text-emerald-500" />}
-                label="Driving Directions"
-                value={formatNumber(conversions.directions)}
-                subtitle="From Google Ads"
-                bgClass="bg-slate-50"
-              />
-              <KpiCard
-                icon={<MapPin size={16} className="text-emerald-500" />}
-                label="Store Visits"
-                value={formatNumber(conversions.storeVisits)}
-                subtitle="From Google Ads"
-                bgClass="bg-slate-50"
-              />
-            </div>
+            {/* Two columns: left = 3 stacked cards (Driving Directions, Store Visits,
+                Website Visits & User Journey); right = Call Summary, stretched via
+                flexbox default align-items to match the left column's total height. */}
+            <div className="flex flex-col lg:flex-row gap-4">
 
-            {/* Row 2: Website visits + Call summary side by side */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {/* LEFT COLUMN — narrower, ~1 part of a 1:1.6 ratio */}
+              <div className="flex flex-col gap-3 lg:w-[38%] lg:flex-shrink-0">
+                <KpiCard
+                  icon={<Navigation size={16} className="text-emerald-500" />}
+                  label="Driving Directions"
+                  value={formatNumber(conversions.directions)}
+                  subtitle="From Google Ads"
+                  bgClass="bg-slate-50"
+                />
+                <KpiCard
+                  icon={<MapPin size={16} className="text-emerald-500" />}
+                  label="Store Visits"
+                  value={formatNumber(conversions.storeVisits)}
+                  subtitle="From Google Ads"
+                  bgClass="bg-slate-50"
+                />
 
-              {/* Website Visits & User Journey */}
-              <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4">
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">Website - Visits and User Journey</h3>
-                <table className="w-full">
-                  <tbody>
-                    <tr>
-                      <td className="py-2 text-sm text-slate-700 font-medium">Website Visits</td>
-                      <td className="py-2 text-right text-xl font-bold text-slate-900 font-mono">
-                        {formatNumber(conversions.websiteVisits)}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={2} className="py-0">
-                        <div className="border-t border-slate-200 my-1" />
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={2} className="py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                        User Journey
-                      </td>
-                    </tr>
-                    {[
-                      { label: 'Call Clicks', value: conversions.callNumberTrack + conversions.callTrack },
-                      { label: 'Download Catalogue', value: conversions.downloadCatalogue },
-                      { label: 'Drive Direction', value: conversions.driveDirection },
-                      { label: 'Enquiry Track', value: conversions.enquiryTrack },
-                      { label: 'Form Submit', value: conversions.formSubmit },
-                    ].map(({ label, value }) => (
-                      <tr key={label}>
-                        <td className="py-1.5 pl-4 text-sm text-slate-600">{label}</td>
-                        <td className="py-1.5 text-right text-sm font-mono text-slate-700">
-                          {formatNumber(value)}
+                {/* Website Visits & User Journey — content/styling unchanged, just narrower now */}
+                <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4">
+                  <h3 className="text-sm font-semibold text-slate-800 mb-3">Website - Visits and User Journey</h3>
+                  <table className="w-full">
+                    <tbody>
+                      <tr>
+                        <td className="py-2 text-sm text-slate-700 font-medium">Website Visits</td>
+                        <td className="py-2 text-right text-xl font-bold text-slate-900 font-mono">
+                          {formatNumber(conversions.websiteVisits)}
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                      <tr>
+                        <td colSpan={2} className="py-0">
+                          <div className="border-t border-slate-200 my-1" />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colSpan={2} className="py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                          User Journey
+                        </td>
+                      </tr>
+                      {[
+                        { label: 'Call Clicks', value: conversions.callNumberTrack + conversions.callTrack },
+                        { label: 'Download Catalogue', value: conversions.downloadCatalogue },
+                        { label: 'Drive Direction', value: conversions.driveDirection },
+                        { label: 'Enquiry Track', value: conversions.enquiryTrack },
+                        { label: 'Form Submit', value: conversions.formSubmit },
+                      ].map(({ label, value }) => (
+                        <tr key={label}>
+                          <td className="py-1.5 pl-4 text-sm text-slate-600">{label}</td>
+                          <td className="py-1.5 text-right text-sm font-mono text-slate-700">
+                            {formatNumber(value)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
-              {/* Call Summary */}
-              <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4">
-                <h3 className="text-sm font-semibold text-slate-800">Call Summary</h3>
-                <div className="overflow-x-auto">
+              {/* RIGHT COLUMN — Call Summary, stretched to the left column's full height */}
+              <div className="flex-1 bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col min-h-0">
+                <h3 className="text-sm font-semibold text-slate-800 flex-shrink-0">Call Summary</h3>
+                <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0" style={{ maxHeight: '100%' }}>
                   <table className="w-full text-sm" style={{ tableLayout: 'fixed', minWidth: '700px' }}>
                     <colgroup>
                       <col style={{ width: '90px' }} />
