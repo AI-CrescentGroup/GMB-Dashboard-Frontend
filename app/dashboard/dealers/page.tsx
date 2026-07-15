@@ -13,6 +13,7 @@ import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter'
 import {
   Download, Navigation, MapPin, TrendingUp, Activity, Camera, HelpCircle, X,
+  Eye, MousePointerClick, Percent, IndianRupee, Gauge,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -179,14 +180,14 @@ function KpiCard({
   title?: string
 }) {
   return (
-    <div className={`${bgClass} rounded-xl border border-slate-200 shadow p-5`} title={title}>
-      <div className="flex items-center gap-2 mb-2">
+    <div className={`${bgClass} rounded-xl border border-slate-200 shadow px-4 py-3`} title={title}>
+      <div className="flex items-center gap-1.5 mb-1.5">
         {icon}
-        <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">{label}</span>
+        <span className="text-[11px] text-slate-500 uppercase tracking-wide font-medium">{label}</span>
       </div>
-      <div className="text-2xl font-bold text-slate-900">{value}</div>
-      {subtitle && <div className="text-xs text-slate-400 mt-1">{subtitle}</div>}
-      {note && <div className="text-xs text-slate-400 mt-1">{note}</div>}
+      <div className="text-xl font-bold text-slate-900">{value}</div>
+      {subtitle && <div className="text-[11px] text-slate-400 mt-0.5">{subtitle}</div>}
+      {note && <div className="text-[11px] text-slate-400 mt-0.5">{note}</div>}
     </div>
   )
 }
@@ -210,6 +211,9 @@ function CallsDoughnut({
     { name: 'Answered', value: answered, color: '#1baf7a' },
     { name: 'Missed', value: missed, color: '#e34948' },
   ]
+  // % of total calls RECEIVED (not answered+missed) — Answered + Missed won't
+  // sum to 100%; the remainder is Dialled, which is intentional. Guard /0 → '—'.
+  const pctOfReceived = (v: number) => (received > 0 ? `${((v / received) * 100).toFixed(2)}%` : '—')
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow p-5 h-full">
       <div className="flex items-center justify-between mb-4">
@@ -226,7 +230,7 @@ function CallsDoughnut({
                 <Pie data={data} dataKey="value" innerRadius="62%" outerRadius="100%" paddingAngle={2} stroke="none">
                   {data.map((d) => <Cell key={d.name} fill={d.color} />)}
                 </Pie>
-                <Tooltip formatter={(v: any, n: any) => [Number(v).toLocaleString('en-IN'), n]} />
+                <Tooltip formatter={(v: any, n: any) => [`${Number(v).toLocaleString('en-IN')} (${pctOfReceived(Number(v))})`, n]} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -240,7 +244,10 @@ function CallsDoughnut({
                 <div key={d.name} className="flex items-center gap-2 text-[13px]">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
                   <span className="text-slate-600">{d.name}</span>
-                  <span className="text-slate-900 font-medium ml-auto">{d.value.toLocaleString('en-IN')}</span>
+                  <span className="ml-auto flex items-baseline gap-1.5">
+                    <span className="text-slate-900 font-medium">{d.value.toLocaleString('en-IN')}</span>
+                    <span className="text-slate-400 text-[11px]">{pctOfReceived(d.value)}</span>
+                  </span>
                 </div>
               ))}
             </div>
@@ -345,7 +352,7 @@ function PlatformShareCharts({
       <div className="flex items-center justify-between mb-5">
         <span className="text-sm font-semibold text-slate-800">Platform Share</span>
         <div className="flex items-center gap-4">
-          {(['google', 'facebook', 'instagram'] as const).map((p) => (
+          {(['google', 'instagram', 'facebook'] as const).map((p) => (
             <div key={p} className="flex items-center gap-1.5 text-[12px] text-slate-600">
               <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: PLATFORM_COLORS[p] }} />
               <span className="capitalize">{p}</span>
@@ -360,8 +367,8 @@ function PlatformShareCharts({
           const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0)
           const segments = [
             { platform: 'google', value: g, color: PLATFORM_COLORS.google },
-            { platform: 'facebook', value: f, color: PLATFORM_COLORS.facebook },
             { platform: 'instagram', value: i, color: PLATFORM_COLORS.instagram },
+            { platform: 'facebook', value: f, color: PLATFORM_COLORS.facebook },
           ]
           return (
             <div key={key}>
@@ -370,11 +377,12 @@ function PlatformShareCharts({
                 {total === 0 && <span className="text-xs text-slate-400">No data</span>}
               </div>
               {total > 0 && (
-                <div className="flex items-center gap-4 mb-1.5">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-1.5">
                   {segments.map((s) => s.value > 0 && (
                     <span key={s.platform} className="flex items-center gap-1.5 text-[12px] text-slate-700">
                       <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: s.color }} />
                       <span className="font-medium">{formatShareValue(key, s.value)}</span>
+                      <span className="text-slate-400">({pct(s.value).toFixed(1)}%)</span>
                     </span>
                   ))}
                 </div>
@@ -392,7 +400,7 @@ function PlatformShareCharts({
                       }}
                       title={`${s.platform}: ${pct(s.value).toFixed(1)}%`}
                     >
-                      {pct(s.value) >= 8 ? `${pct(s.value).toFixed(0)}%` : ''}
+                      {pct(s.value) >= 8 ? `${pct(s.value).toFixed(1)}%` : ''}
                     </div>
                   )
                 ))}
@@ -461,8 +469,6 @@ function PlatformCard({
       </div>
       <Row label="Budget" value={budget > 0 ? formatCurrency(budget) : <span className="text-slate-400">—</span>} />
       <Row label="Spend" value={formatCurrency(spend)} />
-      <Row label="Clicks" value={formatMillions(clicks)} />
-      <Row label="Impressions" value={formatMillions(impressions)} />
       {reach !== undefined && (
         <Row
           label="Reach"
@@ -475,6 +481,8 @@ function PlatformCard({
           }
         />
       )}
+      <Row label="Clicks" value={formatMillions(clicks)} />
+      <Row label="Impressions" value={formatMillions(impressions)} />
       <Row label="CTR %" value={`${ctr.toFixed(2)}%`} />
       {showCpm
         ? <Row label="CPM ₹" value={`₹${cpm.toFixed(2)}`} />
@@ -845,6 +853,32 @@ export default function DealersPage() {
     return { directions, storeVisits, websiteVisits, callNumberTrack, callTrack, downloadCatalogue, driveDirection, enquiryTrack, formSubmit }
   }, [summaryRows])
 
+  // KPI-strip rates, all from SUMMED get_metrics_summary totals (never per-row averages):
+  //   CTR — clicks/impressions across the 3 paid platforms
+  //   CPC — Google only (click-billed)
+  //   CPM — Meta only (facebook+instagram, impression-billed)
+  const kpiRates = useMemo(() => {
+    let gSpend = 0, gClicks = 0, metaSpend = 0, metaImpr = 0
+    let allClicks = 0, allImpr = 0
+    summaryRows.forEach((r: any) => {
+      const spend = Number(r.total_spend_inr) || 0
+      const impr = Number(r.total_impressions) || 0
+      const clicks = Number(r.total_link_clicks) || 0
+      if (r.platform === 'google') { gSpend += spend; gClicks += clicks }
+      if (r.platform === 'facebook' || r.platform === 'instagram') {
+        metaSpend += spend; metaImpr += impr
+      }
+      if (r.platform === 'google' || r.platform === 'facebook' || r.platform === 'instagram') {
+        allClicks += clicks; allImpr += impr
+      }
+    })
+    return {
+      ctr: allImpr > 0 ? (allClicks / allImpr) * 100 : 0,
+      cpc: gClicks > 0 ? gSpend / gClicks : 0,
+      cpm: metaImpr > 0 ? (metaSpend / metaImpr) * 1000 : 0,
+    }
+  }, [summaryRows])
+
   const callTotals = useMemo(() => {
     const received = callMetrics.reduce((s: number, r: any) => s + (r.calls_received || 0), 0)
     const answered = callMetrics.reduce((s: number, r: any) => s + (r.calls_answered || 0), 0)
@@ -1071,11 +1105,12 @@ export default function DealersPage() {
 
       {/* ── Top row: 3 stat cards (left) + control stack (right) ── */}
       <div className="flex flex-col lg:flex-row gap-4 mb-4">
-        {/* Stat cards: Total Spend/Planned · Store Visits · Reach */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 content-start">
+        {/* Stat cards — Row 1: Total Spend · Reach · Impressions · Clicks;
+            Row 2: CTR % · CPC ₹ · CPM ₹ · Store Visits */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-1 content-start">
           {loading ? (
-            Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="bg-slate-100 animate-pulse rounded-xl h-[104px]" />
+            Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="bg-slate-100 animate-pulse rounded-xl h-[88px]" />
             ))
           ) : (
             <>
@@ -1090,11 +1125,6 @@ export default function DealersPage() {
                   : `${((kpi.totalSpend / totalPlannedBudget) * 100).toFixed(1)}% of planned budget`}
               />
               <KpiCard
-                icon={<MapPin size={16} className="text-emerald-500" />}
-                label="Store Visits"
-                value={formatNumber(conversions.storeVisits)}
-              />
-              <KpiCard
                 icon={<Activity size={16} className="text-slate-300" />}
                 label="Reach"
                 value={
@@ -1103,20 +1133,49 @@ export default function DealersPage() {
                   : formatMillions(reachData.reach)
                 }
                 note={
-                  reachLoading ? undefined
-                  : reachData?.reach == null ? 'Reach unavailable'
-                  : reachData.dealers_covered < reachData.dealers_requested
+                  role === 'admin' && !reachLoading && reachData?.reach != null
+                  && reachData.dealers_covered < reachData.dealers_requested
                     ? `${reachData.dealers_covered}/${reachData.dealers_requested} dealers`
                     : undefined
                 }
                 title={!reachLoading && reachData?.reach == null ? 'Reach unavailable — check connection' : undefined}
+              />
+              <KpiCard
+                icon={<Eye size={16} className="text-sky-500" />}
+                label="Impressions"
+                value={formatMillions(kpi.totalImpressions)}
+              />
+              <KpiCard
+                icon={<MousePointerClick size={16} className="text-violet-500" />}
+                label="Clicks"
+                value={formatMillions(kpi.totalClicks)}
+              />
+              <KpiCard
+                icon={<Percent size={16} className="text-amber-500" />}
+                label="CTR %"
+                value={`${kpiRates.ctr.toFixed(2)}%`}
+              />
+              <KpiCard
+                icon={<IndianRupee size={16} className="text-rose-500" />}
+                label="CPC ₹"
+                value={`₹${kpiRates.cpc.toFixed(2)}`}
+              />
+              <KpiCard
+                icon={<Gauge size={16} className="text-teal-500" />}
+                label="CPM ₹"
+                value={`₹${kpiRates.cpm.toFixed(2)}`}
+              />
+              <KpiCard
+                icon={<MapPin size={16} className="text-emerald-500" />}
+                label="Store Visits"
+                value={formatNumber(conversions.storeVisits)}
               />
             </>
           )}
         </div>
 
         {/* Control stack — Select Dealer (unless dealer role) → Date filter → Download PPT */}
-        <div className="flex flex-col gap-2 lg:w-[280px] shrink-0">
+        <div className="flex flex-col gap-2 lg:w-[240px] shrink-0">
           {role !== 'dealer' && (
             <Select
               value={selectedDealerId}
@@ -1193,25 +1252,6 @@ export default function DealersPage() {
               dealerStatus={selectedDealer?.campaign_status}
             />
             <PlatformCard
-              platform="facebook"
-              label="Facebook"
-              color={PLATFORM_COLORS.facebook}
-              budget={facebookBudget}
-              spend={facebookTotals.spend}
-              clicks={facebookTotals.clicks}
-              impressions={facebookTotals.impressions}
-              ctr={facebookTotals.ctr}
-              cpc={facebookTotals.cpc}
-              cpm={facebookTotals.cpm}
-              showCpm={true}
-              reach={tableReach.facebook.value}
-              reachLoading={tableReach.facebook.loading}
-              isAllDealers={!selectedDealerId}
-              campaignCount={facebookCampaigns.length}
-              singleCampaign={facebookCampaigns.length === 1 ? facebookCampaigns[0] : null}
-              dealerStatus={selectedDealer?.campaign_status}
-            />
-            <PlatformCard
               platform="instagram"
               label="Instagram"
               color={PLATFORM_COLORS.instagram}
@@ -1228,6 +1268,25 @@ export default function DealersPage() {
               isAllDealers={!selectedDealerId}
               campaignCount={instagramCampaigns.length}
               singleCampaign={instagramCampaigns.length === 1 ? instagramCampaigns[0] : null}
+              dealerStatus={selectedDealer?.campaign_status}
+            />
+            <PlatformCard
+              platform="facebook"
+              label="Facebook"
+              color={PLATFORM_COLORS.facebook}
+              budget={facebookBudget}
+              spend={facebookTotals.spend}
+              clicks={facebookTotals.clicks}
+              impressions={facebookTotals.impressions}
+              ctr={facebookTotals.ctr}
+              cpc={facebookTotals.cpc}
+              cpm={facebookTotals.cpm}
+              showCpm={true}
+              reach={tableReach.facebook.value}
+              reachLoading={tableReach.facebook.loading}
+              isAllDealers={!selectedDealerId}
+              campaignCount={facebookCampaigns.length}
+              singleCampaign={facebookCampaigns.length === 1 ? facebookCampaigns[0] : null}
               dealerStatus={selectedDealer?.campaign_status}
             />
           </div>
