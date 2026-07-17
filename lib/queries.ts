@@ -462,6 +462,59 @@ export async function getAdCreatives(dealerId: string): Promise<{
   }
 }
 
+// Get ad previews for a specific dealer, grouped by platform. Google is
+// always empty for now — no Google preview pipeline exists yet.
+export async function getAdPreviews(dealerId: string): Promise<{
+  google: any[];
+  facebook: any[];
+  instagram: any[];
+}> {
+  const { data, error } = await supabase
+    .from('ad_previews')
+    .select('id, platform, ad_id, card_index, storage_url')
+    .eq('dealer_id', dealerId)
+    .order('platform', { ascending: true })
+    .order('card_index', { ascending: true })
+  if (error) { console.error('getAdPreviews error:', error); return { google: [], facebook: [], instagram: [] } }
+  const rows = data ?? []
+  return {
+    google:    rows.filter(r => r.platform === 'google'),
+    facebook:  rows.filter(r => r.platform === 'facebook'),
+    instagram: rows.filter(r => r.platform === 'instagram'),
+  }
+}
+
+const AUDIENCE_AGE_ORDER = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+']
+
+// Get Meta audience (age/gender) link-click breakdown via get_audience_breakdown
+// RPC — SECURITY INVOKER, RLS applies automatically, same convention as
+// get_metrics_summary. dealerId=null aggregates across all RLS-visible dealers.
+// The RPC already excludes the 'Unknown'/'unknown' buckets server-side.
+export async function getAudienceBreakdown(
+  dealerId: string | null,
+  platform: 'instagram' | 'facebook',
+  dateFrom: string,
+  dateTo: string
+): Promise<{ age: { bucket: string; clicks: number }[]; gender: { bucket: string; clicks: number }[] }> {
+  const { data, error } = await supabase.rpc('get_audience_breakdown', {
+    p_dealer_id: dealerId,
+    p_platform: platform,
+    p_date_from: dateFrom,
+    p_date_to: dateTo,
+  })
+  if (error) { console.error('getAudienceBreakdown error:', error); return { age: [], gender: [] } }
+  const rows = data ?? []
+  const age = AUDIENCE_AGE_ORDER.map(bucket => ({
+    bucket,
+    clicks: rows.find((r: any) => r.breakdown_type === 'age' && r.breakdown_value === bucket)?.total_link_clicks ?? 0,
+  }))
+  const gender = ['male', 'female'].map(bucket => ({
+    bucket,
+    clicks: rows.find((r: any) => r.breakdown_type === 'gender' && r.breakdown_value === bucket)?.total_link_clicks ?? 0,
+  }))
+  return { age, gender }
+}
+
 // Get live Meta reach (calls the FastAPI backend, not Supabase directly)
 export async function getReach(
   dealerIds: string[] | null,  // null = all dealers
