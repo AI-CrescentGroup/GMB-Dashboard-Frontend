@@ -863,7 +863,9 @@ export default function DealersPage() {
 
   // Load dealers + latest date on mount
   useEffect(() => {
-    getDealers().then(setDealers)
+    getDealers()
+      .then(setDealers)
+      .catch(err => { console.error('getDealers error:', err); setDealers([]) })
     getLatestMetricDate().then(setLatestDate).catch(() => {})
   }, [])
 

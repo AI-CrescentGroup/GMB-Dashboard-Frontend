@@ -9,6 +9,8 @@ import { getDealers, getMetrics, getMetricsSummary, getMetricsByDealerMonth, get
 import { TrendingUp, MapPin, Activity, Phone, Navigation, Eye, Zap, MousePointerClick } from 'lucide-react'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
 import { DateRangeFilter, isRangeMonthAligned, type DateRange } from '@/components/DateRangeFilter'
+import DashboardSidebar, { type OverviewSidebarView } from '@/components/DashboardSidebar'
+import PlacementAnalysisPanel from '@/components/placement/PlacementAnalysisPanel'
 
 // Full data range — used to preload the month-grain RPC + calls once on mount.
 const DATE_FROM = ALL_TIME_DATE_FROM
@@ -173,9 +175,11 @@ function CustomTooltip({ active, payload }: any) {
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── "Overview metrics" sidebar panel — verbatim relocation of the former
+//     top-level OverviewPage. Same state, same effects, same JSX; only the
+//     wrapping default-export component below changed (added the sidebar). ──
 
-export default function OverviewPage() {
+function OverviewMetricsPanel() {
   const [dealers, setDealers] = useState<any[]>([])
   // Month-aligned ranges (incl. All-time default): fast pre-aggregated
   // (dealer, month, platform) rows from RPC, preloaded once over the full range.
@@ -248,9 +252,14 @@ export default function OverviewPage() {
     if (dealers.length === 0) return
     let cancelled = false
     const dealerIds = dealers.map((d: any) => d.id)
-    getMetricsSummary(dealerIds, range.from, range.to, []).then((summary) => {
-      if (!cancelled) setMetricsSummary(summary)
-    })
+    getMetricsSummary(dealerIds, range.from, range.to, [])
+      .then((summary) => {
+        if (!cancelled) setMetricsSummary(summary)
+      })
+      .catch((err) => {
+        console.error('getMetricsSummary error:', err)
+        if (!cancelled) setMetricsSummary([])
+      })
     return () => { cancelled = true }
   }, [dealers, range])
 
@@ -991,6 +1000,32 @@ export default function OverviewPage() {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Top-level route component — adds the left sidebar, switches between
+//     "Overview metrics" (verbatim relocation above) and the new
+//     "Placement, audience & creative analysis" panel. Header.tsx's top nav
+//     (Overview | Dealers pills) is untouched — this sidebar lives inside the
+//     existing /dashboard route, one level below it. ─────────────────────────
+
+export default function OverviewPage() {
+  const [activeView, setActiveView] = useState<OverviewSidebarView>('overview')
+  const [role, setRole] = useState('')
+
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    setRole(user?.role || '')
+  }, [])
+
+  return (
+    <div className="flex items-start">
+      <DashboardSidebar activeView={activeView} onSelect={setActiveView} />
+      <div className="flex-1 min-w-0">
+        {activeView === 'overview' && <OverviewMetricsPanel />}
+        {activeView === 'placement' && <PlacementAnalysisPanel role={role} />}
       </div>
     </div>
   )

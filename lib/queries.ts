@@ -515,6 +515,40 @@ export async function getAudienceBreakdown(
   return { age, gender }
 }
 
+// Get channel/placement link-click breakdown via get_placement_breakdown RPC —
+// SECURITY INVOKER, RLS applies automatically, same convention as
+// getAudienceBreakdown(). dealerId=null aggregates across all RLS-visible dealers.
+//
+// IMPORTANT: the RPC result has NO platform column, so p_platform must NEVER be
+// null when comparing across platforms — a null call silently merges raw values
+// that collide across platforms (e.g. Meta's 'feed' exists under both facebook
+// and instagram; a null-platform call would sum them into one indistinguishable
+// bucket). Always call once per platform ('google' | 'facebook' | 'instagram')
+// and combine client-side, never a single null-platform call.
+//
+// Returns RAW breakdown_value strings, unsorted, unmapped — display relabeling
+// (e.g. CONTENT -> "Display") and sorting happen in the component, never here,
+// so the raw stored values are never altered in this layer.
+export async function getPlacementBreakdown(
+  dealerId: string | null,
+  platform: 'google' | 'facebook' | 'instagram',
+  dateFrom: string,
+  dateTo: string
+): Promise<{ breakdown_value: string; link_clicks: number }[]> {
+  const { data, error } = await supabase.rpc('get_placement_breakdown', {
+    p_dealer_id: dealerId,
+    p_platform: platform,
+    p_date_from: dateFrom,
+    p_date_to: dateTo,
+  })
+  if (error) { console.error('getPlacementBreakdown error:', error); return [] }
+  const rows = data ?? []
+  return rows.map((r: any) => ({
+    breakdown_value: r.breakdown_value as string,
+    link_clicks: Number(r.total_link_clicks) || 0,
+  }))
+}
+
 // Get live Meta reach (calls the FastAPI backend, not Supabase directly)
 export async function getReach(
   dealerIds: string[] | null,  // null = all dealers
