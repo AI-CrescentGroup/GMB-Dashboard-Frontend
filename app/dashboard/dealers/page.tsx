@@ -6,7 +6,7 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { getDealers, getMetrics, getMetricsSummary, getCampaignSummary, getMetricsByDealerMonth, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives, getAdPreviews, getAudienceBreakdown, getReach } from '@/lib/queries'
+import { getDealers, getMetrics, getMetricsSummary, getCampaignSummary, getMetricsByDealerMonth, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives, getAdPreviews, getReach } from '@/lib/queries'
 import { exportDealerPPT } from '@/lib/exportPPT'
 import { Select } from '@/components/ui/select'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
@@ -473,178 +473,6 @@ function PlatformShareCharts({
   )
 }
 
-// Two-button Instagram/Facebook platform toggle, shared header pattern for
-// both Audience Demographics cards. Reuses toggleButtonClass so it reads as
-// the same design language as MetricLineChart's metric buttons.
-function AudiencePlatformToggle({
-  platform, onChange, platforms,
-}: {
-  platform: 'instagram' | 'facebook'
-  onChange: (p: 'instagram' | 'facebook') => void
-  // Only the Meta platforms this dealer actually runs campaigns on — a dealer
-  // with no Facebook never sees a Facebook button to click into an empty card.
-  platforms: readonly ('instagram' | 'facebook')[]
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      {platforms.map((p) => (
-        <button
-          key={p}
-          type="button"
-          onClick={() => onChange(p)}
-          className={toggleButtonClass(platform === p)}
-        >
-          {p === 'instagram' ? 'Instagram' : 'Facebook'}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-// Gender doughnut — Male/Female split of link clicks for the selected Meta
-// platform. Styled like CallsDoughnut (innerRadius doughnut, total stat +
-// labeled breakdown list, "N (X.XX%)" tooltip). Colors reuse Calls'
-// Answered/Missed pair — gender isn't a platform, so PLATFORM_COLORS doesn't
-// apply here.
-function AudienceGenderCard({
-  data, platform, onPlatformChange, rangeLabel, loading, platforms,
-}: {
-  data: { bucket: string; clicks: number }[]
-  platform: 'instagram' | 'facebook'
-  onPlatformChange: (p: 'instagram' | 'facebook') => void
-  rangeLabel: string
-  loading: boolean
-  platforms: readonly ('instagram' | 'facebook')[]
-}) {
-  const male = data.find(d => d.bucket === 'male')?.clicks ?? 0
-  const female = data.find(d => d.bucket === 'female')?.clicks ?? 0
-  const total = male + female
-  // Zero-value buckets are dropped rather than drawn as an empty slice/row.
-  const chartData = [
-    { name: 'Male', value: male, color: '#1baf7a' },
-    { name: 'Female', value: female, color: '#e34948' },
-  ].filter(d => d.value > 0)
-  const pctOfTotal = (v: number) => (total > 0 ? `${((v / total) * 100).toFixed(2)}%` : '—')
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow p-5 h-full">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-semibold text-slate-800">Gender</span>
-          <AudiencePlatformToggle platform={platform} onChange={onPlatformChange} platforms={platforms} />
-        </div>
-        <RangeChip label={rangeLabel} />
-      </div>
-      {loading ? (
-        <div className="flex items-center justify-center h-[200px] text-sm text-slate-400">Loading…</div>
-      ) : total === 0 ? (
-        <div className="flex items-center justify-center h-[200px] text-sm text-slate-400">No data for selected period</div>
-      ) : (
-        <div className="flex items-center gap-5">
-          <div className="w-[150px] h-[150px] shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={chartData} dataKey="value" innerRadius="62%" outerRadius="100%" paddingAngle={2} stroke="none">
-                  {chartData.map((d) => <Cell key={d.name} fill={d.color} />)}
-                </Pie>
-                <Tooltip formatter={(v: any, n: any) => [`${Number(v).toLocaleString('en-IN')} (${pctOfTotal(Number(v))})`, n]} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex flex-col gap-3">
-            <div>
-              <div className="text-[11px] text-slate-400 uppercase tracking-wide">Total link clicks</div>
-              <div className="text-2xl font-bold text-slate-900">{total.toLocaleString('en-IN')}</div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {chartData.map((d) => (
-                <div key={d.name} className="flex items-center gap-2 text-[13px]">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
-                  <span className="text-slate-600">{d.name}</span>
-                  <span className="ml-auto flex items-baseline gap-1.5">
-                    <span className="text-slate-900 font-medium">{d.value.toLocaleString('en-IN')}</span>
-                    <span className="text-slate-400 text-[11px]">{pctOfTotal(d.value)}</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-const AUDIENCE_AGE_BUCKETS = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+'] as const
-
-// Age breakdown — six fixed-order horizontal bars of link clicks for the
-// selected Meta platform. Styled like PlatformShareCharts' manual div-bar
-// rows, adjusted for a single series (one color, not 3-way stacked). Bar
-// color follows PLATFORM_COLORS[platform], so switching the toggle recolors
-// the bars to match (facebook-green / instagram-red).
-function AudienceAgeCard({
-  data, platform, onPlatformChange, rangeLabel, loading, platforms,
-}: {
-  data: { bucket: string; clicks: number }[]
-  platform: 'instagram' | 'facebook'
-  onPlatformChange: (p: 'instagram' | 'facebook') => void
-  rangeLabel: string
-  loading: boolean
-  platforms: readonly ('instagram' | 'facebook')[]
-}) {
-  const total = data.reduce((s, d) => s + d.clicks, 0)
-  const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0)
-  const color = PLATFORM_COLORS[platform]
-  // Fixed bucket order is preserved, but buckets with no clicks are dropped
-  // rather than rendered as a 0-width bar.
-  const ageRows = AUDIENCE_AGE_BUCKETS
-    .map((bucket) => ({ bucket, clicks: data.find(d => d.bucket === bucket)?.clicks ?? 0 }))
-    .filter((r) => r.clicks > 0)
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow p-5 h-full">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-semibold text-slate-800">Age</span>
-          <AudiencePlatformToggle platform={platform} onChange={onPlatformChange} platforms={platforms} />
-        </div>
-        <RangeChip label={rangeLabel} />
-      </div>
-      {loading ? (
-        <div className="flex items-center justify-center h-[200px] text-sm text-slate-400">Loading…</div>
-      ) : total === 0 ? (
-        <div className="flex items-center justify-center h-[200px] text-sm text-slate-400">No data for selected period</div>
-      ) : (
-        <>
-          <div className="mb-4">
-            <div className="text-[11px] text-slate-400 uppercase tracking-wide">Total link clicks</div>
-            <div className="text-2xl font-bold text-slate-900">{total.toLocaleString('en-IN')}</div>
-          </div>
-          <div className="flex flex-col gap-3">
-            {ageRows.map(({ bucket, clicks }) => {
-              return (
-                <div key={bucket}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{bucket}</span>
-                    <span className="text-[12px] text-slate-700">
-                      <span className="font-medium">{clicks.toLocaleString('en-IN')}</span>
-                      <span className="text-slate-400 ml-1">({pct(clicks).toFixed(1)}%)</span>
-                    </span>
-                  </div>
-                  <div className="h-4 w-full rounded-md overflow-hidden bg-slate-100">
-                    <div
-                      className="h-full rounded-md"
-                      style={{ width: `${pct(clicks)}%`, backgroundColor: color }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
 function PlatformCard({
   platform, label, color, budget, spend, clicks, impressions, ctr, cpc, cpm, showCpm, reach, reachLoading,
   isAllDealers, campaignCount, singleCampaign, dealerStatus,
@@ -885,17 +713,6 @@ export default function DealersPage() {
   const [previewsLoading, setPreviewsLoading] = useState(false)
   const [previewLightboxPlatform, setPreviewLightboxPlatform] = useState<'google' | 'facebook' | 'instagram' | null>(null)
   const [previewCarouselIndex, setPreviewCarouselIndex] = useState<{ google: number; facebook: number; instagram: number }>({ google: 0, facebook: 0, instagram: 0 })
-  // Audience Demographics — two fully independent cards (own platform toggle,
-  // own data, own loading flag, own fetch effect below) so switching one
-  // card's platform never touches the other card's state or triggers its
-  // fetch. Never dealer-gated: dealer_id=null aggregates across all
-  // RLS-visible dealers, same as the KPI strip.
-  const [genderPlatform, setGenderPlatform] = useState<'instagram' | 'facebook'>('instagram')
-  const [genderData, setGenderData] = useState<{ bucket: string; clicks: number }[]>([])
-  const [genderLoading, setGenderLoading] = useState(false)
-  const [agePlatform, setAgePlatform] = useState<'instagram' | 'facebook'>('instagram')
-  const [ageData, setAgeData] = useState<{ bucket: string; clicks: number }[]>([])
-  const [ageLoading, setAgeLoading] = useState(false)
   const [showGlossary, setShowGlossary] = useState(false)
 
   // Live Meta reach — filtered KPI card (all roles)
@@ -1030,14 +847,6 @@ export default function DealersPage() {
     [hasGoogle, hasInstagram, hasFacebook]
   )
 
-  // Audience Demographics is Meta-only. A dealer with neither Meta platform is
-  // just the n=0 edge of this same filter — the whole section drops out.
-  const metaPlatforms = useMemo(
-    () => (['instagram', 'facebook'] as const)
-      .filter((p) => (p === 'instagram' ? hasInstagram : hasFacebook)),
-    [hasInstagram, hasFacebook]
-  )
-
   // Ad Creatives / Ad Previews gate on the SAME booleans, intersected with
   // "actually has an asset to show" — so a stale creative for a platform the
   // dealer no longer runs doesn't resurrect a block. Previews are Meta-only:
@@ -1052,40 +861,6 @@ export default function DealersPage() {
     ),
     [activePlatforms, previewsData]
   )
-
-  // While the campaign summary is still in flight the dealer's coverage isn't known
-  // yet, so the current selection stands — that keeps the audience fetch running in
-  // parallel with the summary rather than serialized behind it. Once coverage IS
-  // known, a selection the dealer doesn't have falls back to its first real Meta
-  // platform (and is undefined when it has none, which skips the fetch entirely).
-  const effectiveGenderPlatform = (loading || metaPlatforms.includes(genderPlatform))
-    ? genderPlatform : metaPlatforms[0]
-  const effectiveAgePlatform = (loading || metaPlatforms.includes(agePlatform))
-    ? agePlatform : metaPlatforms[0]
-
-  // Audience Demographics — NOT dealer-gated (unlike creatives/previews above):
-  // selectedDealerId || null converts the '' aggregate-sentinel to a real null,
-  // which the RPC aggregates across all RLS-visible dealers, same as the KPI
-  // strip's own aggregation behavior. Gender and Age each have their OWN
-  // effect — toggling one card's platform must not refetch or re-render the
-  // other card.
-  useEffect(() => {
-    if (!effectiveGenderPlatform) { setGenderData([]); setGenderLoading(false); return }
-    setGenderLoading(true)
-    getAudienceBreakdown(selectedDealerId || null, effectiveGenderPlatform, range.from, range.to)
-      .then(data => setGenderData(data.gender))
-      .catch(err => console.error('audience (gender) fetch error:', err))
-      .finally(() => setGenderLoading(false))
-  }, [selectedDealerId, effectiveGenderPlatform, range.from, range.to])
-
-  useEffect(() => {
-    if (!effectiveAgePlatform) { setAgeData([]); setAgeLoading(false); return }
-    setAgeLoading(true)
-    getAudienceBreakdown(selectedDealerId || null, effectiveAgePlatform, range.from, range.to)
-      .then(data => setAgeData(data.age))
-      .catch(err => console.error('audience (age) fetch error:', err))
-      .finally(() => setAgeLoading(false))
-  }, [selectedDealerId, effectiveAgePlatform, range.from, range.to])
 
   // ── Derived state ────────────────────────────────────────────────────────────
 
@@ -1586,41 +1361,6 @@ export default function DealersPage() {
             </div>
           </div>
 
-          {/* ── Audience Demographics (never dealer-gated — dealer_id=null
-              aggregates across all RLS-visible dealers, same as the KPI strip).
-              Meta-only, so a dealer with no Facebook AND no Instagram drops the
-              entire section, header included. ── */}
-          {metaPlatforms.length > 0 && effectiveGenderPlatform && effectiveAgePlatform && (
-            <div>
-              <div className="flex items-center justify-between border-l-4 border-cyan-500 pl-3 mb-4">
-                <span className="text-sm font-semibold text-slate-800">Audience Demographics</span>
-                <span className="text-xs text-slate-400">Meta audience — link clicks by age and gender</span>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-1">
-                  <AudienceGenderCard
-                    data={genderData}
-                    platform={effectiveGenderPlatform}
-                    onPlatformChange={setGenderPlatform}
-                    rangeLabel={rangeChip}
-                    loading={genderLoading}
-                    platforms={metaPlatforms}
-                  />
-                </div>
-                <div className="lg:col-span-2">
-                  <AudienceAgeCard
-                    data={ageData}
-                    platform={effectiveAgePlatform}
-                    onPlatformChange={setAgePlatform}
-                    rangeLabel={rangeChip}
-                    loading={ageLoading}
-                    platforms={metaPlatforms}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* ── Platform-wise visualization: platform cards first, share charts below (clear barrier between raw numbers and infographics) ── */}
           {activePlatforms.length > 0 && (
             <div className={`grid ${PLATFORM_GRID_COLS[activePlatforms.length]} gap-3`}>
@@ -1864,10 +1604,10 @@ export default function DealersPage() {
   </div>
 )}
 
-          {/* ── Ad Previews (dealer selected + runs at least one META platform) ──
+          {/* ── Ad Previews (dealer selected + has preview data for Meta platforms) ──
               Previews are Meta-only, so a Google-only dealer can never have one:
               the section drops entirely rather than showing an empty shell. ── */}
-{selectedDealerId && metaPlatforms.length > 0 && (
+{selectedDealerId && previewPlatforms.length > 0 && (
   <div>
     <div className="flex items-center justify-between border-l-4 border-purple-500 pl-3 mb-4">
       <span className="text-sm font-semibold text-slate-800">Ad Previews</span>

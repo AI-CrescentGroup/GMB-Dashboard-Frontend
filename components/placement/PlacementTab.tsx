@@ -9,10 +9,19 @@ import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter'
 type Row = { breakdown_value: string; link_clicks: number }
 type DisplayRow = { label: string; link_clicks: number }
 
+// Link clicks are a Reach/Clicks/Impressions-style metric (same family as the
+// Clicks KPI card), so they get the M+/K treatment here too — not Cr/L, which
+// is reserved for GMB/GA4 counts (Store Visits, Website Visits, etc.).
 function formatNumber(val: number): string {
-  if (val >= 10_000_000) return `${(val / 10_000_000).toFixed(1)}Cr`
-  if (val >= 100_000) return `${(val / 100_000).toFixed(1)}L`
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}M+`
   if (val >= 1_000) return `${(val / 1_000).toFixed(1)}K`
+  return val.toLocaleString('en-IN')
+}
+
+// Hover text for every formatted value above — same "tooltip on everything"
+// convention as the Clicks KPI card, so an abbreviated number is never the
+// only version visible.
+function exactValue(val: number): string {
   return val.toLocaleString('en-IN')
 }
 
@@ -95,7 +104,9 @@ function PlatformCard({
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
       <div className="flex items-center justify-between mb-4">
         <span className="text-sm font-semibold text-slate-800">{title}</span>
-        {!loading && <span className="text-xs text-slate-400">{formatNumber(total)} link clicks</span>}
+        {!loading && (
+          <span className="text-xs text-slate-400" title={exactValue(total)}>{formatNumber(total)} link clicks</span>
+        )}
       </div>
 
       {loading ? (
@@ -116,7 +127,7 @@ function PlatformCard({
               <div key={r.label}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[13px] text-slate-600">{r.label}</span>
-                  <span className="text-[13px] font-medium text-slate-800">{formatNumber(r.link_clicks)}</span>
+                  <span className="text-[13px] font-medium text-slate-800" title={exactValue(r.link_clicks)}>{formatNumber(r.link_clicks)}</span>
                 </div>
                 <div className="bg-slate-100 h-2 rounded-full overflow-hidden">
                   <div className={`h-full rounded-full transition-all ${accentClassName}`} style={{ width: `${pct}%` }} />
