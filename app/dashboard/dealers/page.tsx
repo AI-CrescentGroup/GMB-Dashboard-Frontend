@@ -48,8 +48,34 @@ function formatCurrency(val: number): string {
   return `₹${val.toLocaleString('en-IN')}`
 }
 
-function formatMillions(val: number): string {
-  return `${(val / 1_000_000).toFixed(2)}Mn`
+// Reach / Clicks / Impressions only. These run to the billions, so they get a
+// raw integer under 1K, K through the thousands, and "M+" (not "Mn") from a
+// million up — the "+" reads as "at least this much" for a rounded headline
+// figure. The exact count is always one hover away via exactValue() below.
+function formatReachStyle(val: number): string {
+  // Up to 2 decimals, trailing zeros trimmed — "2.07M+" keeps both, but a round
+  // axis tick reads "350M+" rather than "350.00M+".
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}M+`
+  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}K`
+  return val.toLocaleString('en-IN')
+}
+
+// Store Visits / Website Visits / Driving Directions — every count-type metric
+// that ISN'T reach/clicks/impressions. Same L/Cr thresholds and 2-decimal
+// precision as formatCurrency above, just without the ₹: these are read by an
+// Indian audience where lakh/crore is the natural scale for this magnitude.
+function formatLakhStyle(val: number): string {
+  if (val >= 10_000_000) return `${(val / 10_000_000).toFixed(2)}Cr`
+  if (val >= 100_000) return `${(val / 100_000).toFixed(2)}L`
+  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}K`
+  return val.toLocaleString('en-IN')
+}
+
+// Hover text for every value rendered through the two formatters above —
+// applied unconditionally, including to values under 1K that are already exact.
+// An abbreviated number should never be the only version a dealer can see.
+function exactValue(val: number): string {
+  return val.toLocaleString('en-IN')
 }
 
 function formatPeriod(startDate: string | null, endDate: string | null): string {
@@ -342,6 +368,15 @@ function chipDate(iso: string): string {
 // table's own aggregate row) and the existing tableReach state. No new fetch,
 // no new metric math.
 
+// Grid width for any section that renders one block per active platform. Tailwind
+// needs literal class names, so the count maps to a fixed class rather than being
+// interpolated: 1 platform fills the row, 2 split it evenly, 3 keep today's layout.
+const PLATFORM_GRID_COLS: Record<number, string> = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-1 sm:grid-cols-2',
+  3: 'grid-cols-1 sm:grid-cols-3',
+}
+
 const PLATFORM_SHARE_ROWS: { key: 'spend' | 'clicks' | 'impressions'; label: string }[] = [
   { key: 'spend', label: 'Spend' },
   { key: 'clicks', label: 'Clicks' },
@@ -349,22 +384,29 @@ const PLATFORM_SHARE_ROWS: { key: 'spend' | 'clicks' | 'impressions'; label: str
 ]
 
 function formatShareValue(key: 'spend' | 'clicks' | 'impressions', value: number): string {
-  return key === 'spend' ? formatCurrency(value) : formatMillions(value)
+  return key === 'spend' ? formatCurrency(value) : formatReachStyle(value)
 }
 
 function PlatformShareCharts({
-  google, facebook, instagram,
+  google, facebook, instagram, platforms,
 }: {
   google: { spend: number; clicks: number; impressions: number }
   facebook: { spend: number; clicks: number; impressions: number }
   instagram: { spend: number; clicks: number; impressions: number }
+  // Only the platforms this dealer runs campaigns on. Absent platforms lose
+  // their legend dot AND their entry in every Spend/Clicks/Impressions row —
+  // and are excluded from the row total, so the percentages re-base correctly.
+  platforms: readonly ('google' | 'instagram' | 'facebook')[]
 }) {
+  // Nothing to compare when the dealer runs no paid platforms at all.
+  if (platforms.length === 0) return null
+  const totalsByPlatform = { google, instagram, facebook }
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow p-5">
       <div className="flex items-center justify-between mb-5">
         <span className="text-sm font-semibold text-slate-800">Platform Share</span>
         <div className="flex items-center gap-4">
-          {(['google', 'instagram', 'facebook'] as const).map((p) => (
+          {platforms.map((p) => (
             <div key={p} className="flex items-center gap-1.5 text-[12px] text-slate-600">
               <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: PLATFORM_COLORS[p] }} />
               <span className="capitalize">{p}</span>
@@ -374,14 +416,13 @@ function PlatformShareCharts({
       </div>
       <div className="flex flex-col gap-4">
         {PLATFORM_SHARE_ROWS.map(({ key, label }) => {
-          const g = google[key], f = facebook[key], i = instagram[key]
-          const total = g + f + i
+          const segments = platforms.map((p) => ({
+            platform: p,
+            value: totalsByPlatform[p][key],
+            color: PLATFORM_COLORS[p],
+          }))
+          const total = segments.reduce((s, seg) => s + seg.value, 0)
           const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0)
-          const segments = [
-            { platform: 'google', value: g, color: PLATFORM_COLORS.google },
-            { platform: 'instagram', value: i, color: PLATFORM_COLORS.instagram },
-            { platform: 'facebook', value: f, color: PLATFORM_COLORS.facebook },
-          ]
           return (
             <div key={key}>
               <div className="flex items-center justify-between mb-1.5">
@@ -393,7 +434,14 @@ function PlatformShareCharts({
                   {segments.map((s) => s.value > 0 && (
                     <span key={s.platform} className="flex items-center gap-1.5 text-[12px] text-slate-700">
                       <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: s.color }} />
-                      <span className="font-medium">{formatShareValue(key, s.value)}</span>
+                      {/* Spend keeps its existing currency formatting and gets no
+                          exact-value hover — the tooltip covers count metrics only. */}
+                      <span
+                        className="font-medium"
+                        title={key === 'spend' ? undefined : exactValue(s.value)}
+                      >
+                        {formatShareValue(key, s.value)}
+                      </span>
                       <span className="text-slate-400">({pct(s.value).toFixed(1)}%)</span>
                     </span>
                   ))}
@@ -429,11 +477,17 @@ function PlatformShareCharts({
 // both Audience Demographics cards. Reuses toggleButtonClass so it reads as
 // the same design language as MetricLineChart's metric buttons.
 function AudiencePlatformToggle({
-  platform, onChange,
-}: { platform: 'instagram' | 'facebook'; onChange: (p: 'instagram' | 'facebook') => void }) {
+  platform, onChange, platforms,
+}: {
+  platform: 'instagram' | 'facebook'
+  onChange: (p: 'instagram' | 'facebook') => void
+  // Only the Meta platforms this dealer actually runs campaigns on — a dealer
+  // with no Facebook never sees a Facebook button to click into an empty card.
+  platforms: readonly ('instagram' | 'facebook')[]
+}) {
   return (
     <div className="flex items-center gap-1.5">
-      {(['instagram', 'facebook'] as const).map((p) => (
+      {platforms.map((p) => (
         <button
           key={p}
           type="button"
@@ -453,28 +507,30 @@ function AudiencePlatformToggle({
 // Answered/Missed pair — gender isn't a platform, so PLATFORM_COLORS doesn't
 // apply here.
 function AudienceGenderCard({
-  data, platform, onPlatformChange, rangeLabel, loading,
+  data, platform, onPlatformChange, rangeLabel, loading, platforms,
 }: {
   data: { bucket: string; clicks: number }[]
   platform: 'instagram' | 'facebook'
   onPlatformChange: (p: 'instagram' | 'facebook') => void
   rangeLabel: string
   loading: boolean
+  platforms: readonly ('instagram' | 'facebook')[]
 }) {
   const male = data.find(d => d.bucket === 'male')?.clicks ?? 0
   const female = data.find(d => d.bucket === 'female')?.clicks ?? 0
   const total = male + female
+  // Zero-value buckets are dropped rather than drawn as an empty slice/row.
   const chartData = [
     { name: 'Male', value: male, color: '#1baf7a' },
     { name: 'Female', value: female, color: '#e34948' },
-  ]
+  ].filter(d => d.value > 0)
   const pctOfTotal = (v: number) => (total > 0 ? `${((v / total) * 100).toFixed(2)}%` : '—')
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow p-5 h-full">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-semibold text-slate-800">Gender</span>
-          <AudiencePlatformToggle platform={platform} onChange={onPlatformChange} />
+          <AudiencePlatformToggle platform={platform} onChange={onPlatformChange} platforms={platforms} />
         </div>
         <RangeChip label={rangeLabel} />
       </div>
@@ -526,23 +582,29 @@ const AUDIENCE_AGE_BUCKETS = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+'
 // color follows PLATFORM_COLORS[platform], so switching the toggle recolors
 // the bars to match (facebook-green / instagram-red).
 function AudienceAgeCard({
-  data, platform, onPlatformChange, rangeLabel, loading,
+  data, platform, onPlatformChange, rangeLabel, loading, platforms,
 }: {
   data: { bucket: string; clicks: number }[]
   platform: 'instagram' | 'facebook'
   onPlatformChange: (p: 'instagram' | 'facebook') => void
   rangeLabel: string
   loading: boolean
+  platforms: readonly ('instagram' | 'facebook')[]
 }) {
   const total = data.reduce((s, d) => s + d.clicks, 0)
   const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0)
   const color = PLATFORM_COLORS[platform]
+  // Fixed bucket order is preserved, but buckets with no clicks are dropped
+  // rather than rendered as a 0-width bar.
+  const ageRows = AUDIENCE_AGE_BUCKETS
+    .map((bucket) => ({ bucket, clicks: data.find(d => d.bucket === bucket)?.clicks ?? 0 }))
+    .filter((r) => r.clicks > 0)
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow p-5 h-full">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-semibold text-slate-800">Age</span>
-          <AudiencePlatformToggle platform={platform} onChange={onPlatformChange} />
+          <AudiencePlatformToggle platform={platform} onChange={onPlatformChange} platforms={platforms} />
         </div>
         <RangeChip label={rangeLabel} />
       </div>
@@ -557,8 +619,7 @@ function AudienceAgeCard({
             <div className="text-2xl font-bold text-slate-900">{total.toLocaleString('en-IN')}</div>
           </div>
           <div className="flex flex-col gap-3">
-            {AUDIENCE_AGE_BUCKETS.map((bucket) => {
-              const clicks = data.find(d => d.bucket === bucket)?.clicks ?? 0
+            {ageRows.map(({ bucket, clicks }) => {
               return (
                 <div key={bucket}>
                   <div className="flex items-center justify-between mb-1">
@@ -612,10 +673,12 @@ function PlatformCard({
   singleCampaign: { name: string; startDate: string | null; endDate: string | null } | null
   dealerStatus: string | null | undefined
 }) {
-  const Row = ({ label, value }: { label: string; value: ReactNode }) => (
+  // `title` carries the exact-integer hover for the count rows (Reach/Clicks/
+  // Impressions); currency and rate rows pass nothing and stay as they were.
+  const Row = ({ label, value, title }: { label: string; value: ReactNode; title?: string }) => (
     <div className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-b-0">
       <span className="text-xs text-slate-500">{label}</span>
-      <span className="text-sm font-medium text-slate-800">{value}</span>
+      <span className="text-sm font-medium text-slate-800" title={title}>{value}</span>
     </div>
   )
   const showSingle = !isAllDealers && singleCampaign !== null
@@ -648,12 +711,13 @@ function PlatformCard({
               ? <span className="inline-block h-3 w-3 rounded-full border-2 border-slate-300 border-t-indigo-500 animate-spin" />
               : reach == null
                 ? <span className="text-slate-400">—</span>
-                : formatMillions(reach)
+                : formatReachStyle(reach)
           }
+          title={!reachLoading && reach != null ? exactValue(reach) : undefined}
         />
       )}
-      <Row label="Clicks" value={formatMillions(clicks)} />
-      <Row label="Impressions" value={formatMillions(impressions)} />
+      <Row label="Clicks" value={formatReachStyle(clicks)} title={exactValue(clicks)} />
+      <Row label="Impressions" value={formatReachStyle(impressions)} title={exactValue(impressions)} />
       <Row label="CTR %" value={`${ctr.toFixed(2)}%`} />
       {showCpm
         ? <Row label="CPM ₹" value={`₹${cpm.toFixed(2)}`} />
@@ -947,6 +1011,58 @@ export default function DealersPage() {
       .finally(() => setPreviewsLoading(false))
   }, [selectedDealerId])
 
+  // ── Single source of truth for EVERY platform-conditional block on this page ──
+  // Platform cards, Platform Share, Audience Demographics, Ad Creatives and Ad
+  // Previews all gate on these three booleans and nothing else. They read the same
+  // campaignRows that feed the <platform>Campaigns arrays below (from
+  // get_campaign_summary), so they re-derive automatically per dealer AND per date
+  // range — no hardcoded platform lists, no per-dealer special-casing anywhere.
+  // Declared here rather than beside those arrays because the audience effects
+  // below depend on them.
+  const hasGoogle = useMemo(() => campaignRows.some((r: any) => r.platform === 'google'), [campaignRows])
+  const hasFacebook = useMemo(() => campaignRows.some((r: any) => r.platform === 'facebook'), [campaignRows])
+  const hasInstagram = useMemo(() => campaignRows.some((r: any) => r.platform === 'instagram'), [campaignRows])
+
+  // Display order is fixed (Google → Instagram → Facebook); only membership varies.
+  const activePlatforms = useMemo(
+    () => (['google', 'instagram', 'facebook'] as const)
+      .filter((p) => (p === 'google' ? hasGoogle : p === 'instagram' ? hasInstagram : hasFacebook)),
+    [hasGoogle, hasInstagram, hasFacebook]
+  )
+
+  // Audience Demographics is Meta-only. A dealer with neither Meta platform is
+  // just the n=0 edge of this same filter — the whole section drops out.
+  const metaPlatforms = useMemo(
+    () => (['instagram', 'facebook'] as const)
+      .filter((p) => (p === 'instagram' ? hasInstagram : hasFacebook)),
+    [hasInstagram, hasFacebook]
+  )
+
+  // Ad Creatives / Ad Previews gate on the SAME booleans, intersected with
+  // "actually has an asset to show" — so a stale creative for a platform the
+  // dealer no longer runs doesn't resurrect a block. Previews are Meta-only:
+  // Google ad previews are deliberately not wired here.
+  const creativePlatforms = useMemo(
+    () => activePlatforms.filter((p) => creativesData[p].length > 0),
+    [activePlatforms, creativesData]
+  )
+  const previewPlatforms = useMemo(
+    () => activePlatforms.filter(
+      (p): p is 'facebook' | 'instagram' => p !== 'google' && previewsData[p].length > 0
+    ),
+    [activePlatforms, previewsData]
+  )
+
+  // While the campaign summary is still in flight the dealer's coverage isn't known
+  // yet, so the current selection stands — that keeps the audience fetch running in
+  // parallel with the summary rather than serialized behind it. Once coverage IS
+  // known, a selection the dealer doesn't have falls back to its first real Meta
+  // platform (and is undefined when it has none, which skips the fetch entirely).
+  const effectiveGenderPlatform = (loading || metaPlatforms.includes(genderPlatform))
+    ? genderPlatform : metaPlatforms[0]
+  const effectiveAgePlatform = (loading || metaPlatforms.includes(agePlatform))
+    ? agePlatform : metaPlatforms[0]
+
   // Audience Demographics — NOT dealer-gated (unlike creatives/previews above):
   // selectedDealerId || null converts the '' aggregate-sentinel to a real null,
   // which the RPC aggregates across all RLS-visible dealers, same as the KPI
@@ -954,20 +1070,22 @@ export default function DealersPage() {
   // effect — toggling one card's platform must not refetch or re-render the
   // other card.
   useEffect(() => {
+    if (!effectiveGenderPlatform) { setGenderData([]); setGenderLoading(false); return }
     setGenderLoading(true)
-    getAudienceBreakdown(selectedDealerId || null, genderPlatform, range.from, range.to)
+    getAudienceBreakdown(selectedDealerId || null, effectiveGenderPlatform, range.from, range.to)
       .then(data => setGenderData(data.gender))
       .catch(err => console.error('audience (gender) fetch error:', err))
       .finally(() => setGenderLoading(false))
-  }, [selectedDealerId, genderPlatform, range.from, range.to])
+  }, [selectedDealerId, effectiveGenderPlatform, range.from, range.to])
 
   useEffect(() => {
+    if (!effectiveAgePlatform) { setAgeData([]); setAgeLoading(false); return }
     setAgeLoading(true)
-    getAudienceBreakdown(selectedDealerId || null, agePlatform, range.from, range.to)
+    getAudienceBreakdown(selectedDealerId || null, effectiveAgePlatform, range.from, range.to)
       .then(data => setAgeData(data.age))
       .catch(err => console.error('audience (age) fetch error:', err))
       .finally(() => setAgeLoading(false))
-  }, [selectedDealerId, agePlatform, range.from, range.to])
+  }, [selectedDealerId, effectiveAgePlatform, range.from, range.to])
 
   // ── Derived state ────────────────────────────────────────────────────────────
 
@@ -1359,7 +1477,7 @@ export default function DealersPage() {
                 value={
                   reachLoading ? '…'
                   : reachData?.reach == null ? '—'
-                  : formatMillions(reachData.reach)
+                  : formatReachStyle(reachData.reach)
                 }
                 note={
                   role === 'admin' && !reachLoading && reachData?.reach != null
@@ -1367,17 +1485,23 @@ export default function DealersPage() {
                     ? `${reachData.dealers_covered}/${reachData.dealers_requested} dealers`
                     : undefined
                 }
-                title={!reachLoading && reachData?.reach == null ? 'Reach unavailable — check connection' : undefined}
+                title={
+                  reachLoading ? undefined
+                  : reachData?.reach == null ? 'Reach unavailable — check connection'
+                  : exactValue(reachData.reach)
+                }
               />
               <KpiCard
                 icon={<Eye size={16} className="text-sky-500" />}
                 label="Impressions"
-                value={formatMillions(kpi.totalImpressions)}
+                value={formatReachStyle(kpi.totalImpressions)}
+                title={exactValue(kpi.totalImpressions)}
               />
               <KpiCard
                 icon={<MousePointerClick size={16} className="text-violet-500" />}
                 label="Clicks"
-                value={formatMillions(kpi.totalClicks)}
+                value={formatReachStyle(kpi.totalClicks)}
+                title={exactValue(kpi.totalClicks)}
               />
               <KpiCard
                 icon={<Percent size={16} className="text-amber-500" />}
@@ -1397,7 +1521,8 @@ export default function DealersPage() {
               <KpiCard
                 icon={<MapPin size={16} className="text-emerald-500" />}
                 label="Store Visits"
-                value={formatNumber(conversions.storeVisits)}
+                value={formatLakhStyle(conversions.storeVisits)}
+                title={exactValue(conversions.storeVisits)}
               />
             </>
           )}
@@ -1462,93 +1587,94 @@ export default function DealersPage() {
           </div>
 
           {/* ── Audience Demographics (never dealer-gated — dealer_id=null
-              aggregates across all RLS-visible dealers, same as the KPI strip) ── */}
-          <div>
-            <div className="flex items-center justify-between border-l-4 border-cyan-500 pl-3 mb-4">
-              <span className="text-sm font-semibold text-slate-800">Audience Demographics</span>
-              <span className="text-xs text-slate-400">Meta audience — link clicks by age and gender</span>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="lg:col-span-1">
-                <AudienceGenderCard
-                  data={genderData}
-                  platform={genderPlatform}
-                  onPlatformChange={setGenderPlatform}
-                  rangeLabel={rangeChip}
-                  loading={genderLoading}
-                />
+              aggregates across all RLS-visible dealers, same as the KPI strip).
+              Meta-only, so a dealer with no Facebook AND no Instagram drops the
+              entire section, header included. ── */}
+          {metaPlatforms.length > 0 && effectiveGenderPlatform && effectiveAgePlatform && (
+            <div>
+              <div className="flex items-center justify-between border-l-4 border-cyan-500 pl-3 mb-4">
+                <span className="text-sm font-semibold text-slate-800">Audience Demographics</span>
+                <span className="text-xs text-slate-400">Meta audience — link clicks by age and gender</span>
               </div>
-              <div className="lg:col-span-2">
-                <AudienceAgeCard
-                  data={ageData}
-                  platform={agePlatform}
-                  onPlatformChange={setAgePlatform}
-                  rangeLabel={rangeChip}
-                  loading={ageLoading}
-                />
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="lg:col-span-1">
+                  <AudienceGenderCard
+                    data={genderData}
+                    platform={effectiveGenderPlatform}
+                    onPlatformChange={setGenderPlatform}
+                    rangeLabel={rangeChip}
+                    loading={genderLoading}
+                    platforms={metaPlatforms}
+                  />
+                </div>
+                <div className="lg:col-span-2">
+                  <AudienceAgeCard
+                    data={ageData}
+                    platform={effectiveAgePlatform}
+                    onPlatformChange={setAgePlatform}
+                    rangeLabel={rangeChip}
+                    loading={ageLoading}
+                    platforms={metaPlatforms}
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* ── Platform-wise visualization: platform cards first, share charts below (clear barrier between raw numbers and infographics) ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <PlatformCard
-              platform="google"
-              label="Google"
-              color={PLATFORM_COLORS.google}
-              budget={googleBudget}
-              spend={googleTotals.spend}
-              clicks={googleTotals.clicks}
-              impressions={googleTotals.impressions}
-              ctr={googleTotals.ctr}
-              cpc={googleTotals.cpc}
-              cpm={googleTotals.cpm}
-              showCpm={false}
-              isAllDealers={!selectedDealerId}
-              campaignCount={googleCampaigns.length}
-              singleCampaign={googleCampaigns.length === 1 ? googleCampaigns[0] : null}
-              dealerStatus={selectedDealer?.campaign_status}
-            />
-            <PlatformCard
-              platform="instagram"
-              label="Instagram"
-              color={PLATFORM_COLORS.instagram}
-              budget={instagramBudget}
-              spend={instagramTotals.spend}
-              clicks={instagramTotals.clicks}
-              impressions={instagramTotals.impressions}
-              ctr={instagramTotals.ctr}
-              cpc={instagramTotals.cpc}
-              cpm={instagramTotals.cpm}
-              showCpm={true}
-              reach={tableReach.instagram.value}
-              reachLoading={tableReach.instagram.loading}
-              isAllDealers={!selectedDealerId}
-              campaignCount={instagramCampaigns.length}
-              singleCampaign={instagramCampaigns.length === 1 ? instagramCampaigns[0] : null}
-              dealerStatus={selectedDealer?.campaign_status}
-            />
-            <PlatformCard
-              platform="facebook"
-              label="Facebook"
-              color={PLATFORM_COLORS.facebook}
-              budget={facebookBudget}
-              spend={facebookTotals.spend}
-              clicks={facebookTotals.clicks}
-              impressions={facebookTotals.impressions}
-              ctr={facebookTotals.ctr}
-              cpc={facebookTotals.cpc}
-              cpm={facebookTotals.cpm}
-              showCpm={true}
-              reach={tableReach.facebook.value}
-              reachLoading={tableReach.facebook.loading}
-              isAllDealers={!selectedDealerId}
-              campaignCount={facebookCampaigns.length}
-              singleCampaign={facebookCampaigns.length === 1 ? facebookCampaigns[0] : null}
-              dealerStatus={selectedDealer?.campaign_status}
-            />
-          </div>
-          <PlatformShareCharts google={googleTotals} facebook={facebookTotals} instagram={instagramTotals} />
+          {activePlatforms.length > 0 && (
+            <div className={`grid ${PLATFORM_GRID_COLS[activePlatforms.length]} gap-3`}>
+              {activePlatforms.map((p) => {
+                // Google is click-billed (CPC, no reach); Meta platforms are
+                // impression-billed (CPM) and carry a reach figure.
+                const cfg = {
+                  google: {
+                    label: 'Google', budget: googleBudget, totals: googleTotals, showCpm: false,
+                    campaigns: googleCampaigns,
+                    reach: undefined as number | null | undefined, reachLoading: undefined as boolean | undefined,
+                  },
+                  instagram: {
+                    label: 'Instagram', budget: instagramBudget, totals: instagramTotals, showCpm: true,
+                    campaigns: instagramCampaigns,
+                    reach: tableReach.instagram.value, reachLoading: tableReach.instagram.loading,
+                  },
+                  facebook: {
+                    label: 'Facebook', budget: facebookBudget, totals: facebookTotals, showCpm: true,
+                    campaigns: facebookCampaigns,
+                    reach: tableReach.facebook.value, reachLoading: tableReach.facebook.loading,
+                  },
+                }[p]
+                return (
+                  <PlatformCard
+                    key={p}
+                    platform={p}
+                    label={cfg.label}
+                    color={PLATFORM_COLORS[p]}
+                    budget={cfg.budget}
+                    spend={cfg.totals.spend}
+                    clicks={cfg.totals.clicks}
+                    impressions={cfg.totals.impressions}
+                    ctr={cfg.totals.ctr}
+                    cpc={cfg.totals.cpc}
+                    cpm={cfg.totals.cpm}
+                    showCpm={cfg.showCpm}
+                    reach={cfg.reach}
+                    reachLoading={cfg.reachLoading}
+                    isAllDealers={!selectedDealerId}
+                    campaignCount={cfg.campaigns.length}
+                    singleCampaign={cfg.campaigns.length === 1 ? cfg.campaigns[0] : null}
+                    dealerStatus={selectedDealer?.campaign_status}
+                  />
+                )
+              })}
+            </div>
+          )}
+          <PlatformShareCharts
+            google={googleTotals}
+            facebook={facebookTotals}
+            instagram={instagramTotals}
+            platforms={activePlatforms}
+          />
 
           {/* ── Conversions Section ── */}
           <div className="bg-white rounded-xl border border-slate-200 shadow p-6">
@@ -1567,16 +1693,18 @@ export default function DealersPage() {
                 <KpiCard
                   icon={<Navigation size={16} className="text-emerald-500" />}
                   label="Driving Directions"
-                  value={formatNumber(conversions.directions)}
+                  value={formatLakhStyle(conversions.directions)}
                   subtitle="From Google Ads"
                   bgClass="bg-slate-50"
+                  title={exactValue(conversions.directions)}
                 />
                 <KpiCard
                   icon={<MapPin size={16} className="text-emerald-500" />}
                   label="Store Visits"
-                  value={formatNumber(conversions.storeVisits)}
+                  value={formatLakhStyle(conversions.storeVisits)}
                   subtitle="From Google Ads"
                   bgClass="bg-slate-50"
+                  title={exactValue(conversions.storeVisits)}
                 />
 
                 {/* Website Visits & User Journey — content/styling unchanged, just narrower now */}
@@ -1586,8 +1714,11 @@ export default function DealersPage() {
                     <tbody>
                       <tr>
                         <td className="py-2 text-sm text-slate-700 font-medium">Website Visits</td>
-                        <td className="py-2 text-right text-xl font-bold text-slate-900 font-mono">
-                          {formatNumber(conversions.websiteVisits)}
+                        <td
+                          className="py-2 text-right text-xl font-bold text-slate-900 font-mono"
+                          title={exactValue(conversions.websiteVisits)}
+                        >
+                          {formatLakhStyle(conversions.websiteVisits)}
                         </td>
                       </tr>
                       <tr>
@@ -1609,8 +1740,11 @@ export default function DealersPage() {
                       ].map(({ label, value }) => (
                         <tr key={label}>
                           <td className="py-1.5 pl-4 text-sm text-slate-600">{label}</td>
-                          <td className="py-1.5 text-right text-sm font-mono text-slate-700">
-                            {formatNumber(value)}
+                          <td
+                            className="py-1.5 text-right text-sm font-mono text-slate-700"
+                            title={exactValue(value)}
+                          >
+                            {formatLakhStyle(value)}
                           </td>
                         </tr>
                       ))}
@@ -1686,8 +1820,11 @@ export default function DealersPage() {
             </div>
           </div>
 
-          {/* ── Ad Creatives (only when a dealer is selected) ── */}
-{selectedDealerId && (
+          {/* ── Ad Creatives (dealer selected + runs at least one platform) ──
+              Same gate as everything else: a dealer with no paid platforms has no
+              section at all. "No creatives found" stays for the different case of
+              a dealer who DOES run platforms but has no assets uploaded. ── */}
+{selectedDealerId && activePlatforms.length > 0 && (
   <div>
     <div className="flex items-center justify-between border-l-4 border-pink-500 pl-3 mb-4">
       <span className="text-sm font-semibold text-slate-800">Ad Creatives</span>
@@ -1696,47 +1833,41 @@ export default function DealersPage() {
 
     {creativesLoading ? (
       <div className="text-center py-12 text-slate-400 text-sm">Loading creatives...</div>
-    ) : (creativesData.google.length === 0 && creativesData.facebook.length === 0 && creativesData.instagram.length === 0) ? (
+    ) : creativePlatforms.length === 0 ? (
       <div className="text-center py-12 text-slate-400 text-sm">No creatives found for this dealer</div>
     ) : (
+      // flex-1 on each carousel means the row re-splits itself to however many
+      // blocks actually render — no dead space held for an absent platform.
       <div className="flex flex-col md:flex-row gap-6">
-        <CreativeCarousel
-          platform="google"
-          label="Google"
-          badgeClass="text-blue-700 bg-blue-50 border border-blue-100"
-          creatives={creativesData.google}
-          index={carouselIndex.google}
-          onIndexChange={(newIndex) => setCarouselIndex(prev => ({ ...prev, google: newIndex }))}
-          onImageClick={() => setLightboxPlatform('google')}
-          showTypeTag={true}
-        />
-        <CreativeCarousel
-          platform="facebook"
-          label="Facebook"
-          badgeClass="text-indigo-700 bg-indigo-50 border border-indigo-100"
-          creatives={creativesData.facebook}
-          index={carouselIndex.facebook}
-          onIndexChange={(newIndex) => setCarouselIndex(prev => ({ ...prev, facebook: newIndex }))}
-          onImageClick={() => setLightboxPlatform('facebook')}
-          showTypeTag={false}
-        />
-        <CreativeCarousel
-          platform="instagram"
-          label="Instagram"
-          badgeClass="text-pink-700 bg-pink-50 border border-pink-100"
-          creatives={creativesData.instagram}
-          index={carouselIndex.instagram}
-          onIndexChange={(newIndex) => setCarouselIndex(prev => ({ ...prev, instagram: newIndex }))}
-          onImageClick={() => setLightboxPlatform('instagram')}
-          showTypeTag={false}
-        />
+        {creativePlatforms.map((p) => {
+          const cfg = {
+            google: { label: 'Google', badgeClass: 'text-blue-700 bg-blue-50 border border-blue-100', showTypeTag: true },
+            facebook: { label: 'Facebook', badgeClass: 'text-indigo-700 bg-indigo-50 border border-indigo-100', showTypeTag: false },
+            instagram: { label: 'Instagram', badgeClass: 'text-pink-700 bg-pink-50 border border-pink-100', showTypeTag: false },
+          }[p]
+          return (
+            <CreativeCarousel
+              key={p}
+              platform={p}
+              label={cfg.label}
+              badgeClass={cfg.badgeClass}
+              creatives={creativesData[p]}
+              index={carouselIndex[p]}
+              onIndexChange={(newIndex) => setCarouselIndex(prev => ({ ...prev, [p]: newIndex }))}
+              onImageClick={() => setLightboxPlatform(p)}
+              showTypeTag={cfg.showTypeTag}
+            />
+          )
+        })}
       </div>
     )}
   </div>
 )}
 
-          {/* ── Ad Previews (only when a dealer is selected) ── */}
-{selectedDealerId && (
+          {/* ── Ad Previews (dealer selected + runs at least one META platform) ──
+              Previews are Meta-only, so a Google-only dealer can never have one:
+              the section drops entirely rather than showing an empty shell. ── */}
+{selectedDealerId && metaPlatforms.length > 0 && (
   <div>
     <div className="flex items-center justify-between border-l-4 border-purple-500 pl-3 mb-4">
       <span className="text-sm font-semibold text-slate-800">Ad Previews</span>
@@ -1745,30 +1876,31 @@ export default function DealersPage() {
 
     {previewsLoading ? (
       <div className="text-center py-12 text-slate-400 text-sm">Loading previews...</div>
-    ) : (previewsData.google.length === 0 && previewsData.facebook.length === 0 && previewsData.instagram.length === 0) ? (
+    ) : previewPlatforms.length === 0 ? (
       <div className="text-center py-12 text-slate-400 text-sm">No ad previews found for this dealer</div>
     ) : (
+      // Meta-only by design — Google ad previews are out of scope and are not
+      // wired here. Same flex-1 re-split as Ad Creatives above.
       <div className="flex flex-col md:flex-row gap-6">
-        <CreativeCarousel
-          platform="facebook"
-          label="Facebook"
-          badgeClass="text-indigo-700 bg-indigo-50 border border-indigo-100"
-          creatives={previewsData.facebook}
-          index={previewCarouselIndex.facebook}
-          onIndexChange={(newIndex) => setPreviewCarouselIndex(prev => ({ ...prev, facebook: newIndex }))}
-          onImageClick={() => setPreviewLightboxPlatform('facebook')}
-          showTypeTag={false}
-        />
-        <CreativeCarousel
-          platform="instagram"
-          label="Instagram"
-          badgeClass="text-pink-700 bg-pink-50 border border-pink-100"
-          creatives={previewsData.instagram}
-          index={previewCarouselIndex.instagram}
-          onIndexChange={(newIndex) => setPreviewCarouselIndex(prev => ({ ...prev, instagram: newIndex }))}
-          onImageClick={() => setPreviewLightboxPlatform('instagram')}
-          showTypeTag={false}
-        />
+        {previewPlatforms.map((p) => {
+          const cfg = {
+            facebook: { label: 'Facebook', badgeClass: 'text-indigo-700 bg-indigo-50 border border-indigo-100' },
+            instagram: { label: 'Instagram', badgeClass: 'text-pink-700 bg-pink-50 border border-pink-100' },
+          }[p]
+          return (
+            <CreativeCarousel
+              key={p}
+              platform={p}
+              label={cfg.label}
+              badgeClass={cfg.badgeClass}
+              creatives={previewsData[p]}
+              index={previewCarouselIndex[p]}
+              onIndexChange={(newIndex) => setPreviewCarouselIndex(prev => ({ ...prev, [p]: newIndex }))}
+              onImageClick={() => setPreviewLightboxPlatform(p)}
+              showTypeTag={false}
+            />
+          )
+        })}
       </div>
     )}
   </div>
@@ -1861,29 +1993,59 @@ export default function DealersPage() {
               ✕ Close
             </button>
           </div>
-          {previewLightboxIndex > 0 && (
-            <button
-              onClick={() => setPreviewCarouselIndex(prev => ({ ...prev, [previewLightboxPlatform]: previewLightboxIndex - 1 }))}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-slate-700 hover:bg-white transition-colors"
-              aria-label="Previous preview (lightbox)"
-            >
-              ‹
-            </button>
+          {previewLightboxPlatform === 'facebook' ? (
+            <div className="relative inline-block max-w-full mx-auto">
+              {previewLightboxIndex > 0 && (
+                <button
+                  onClick={() => setPreviewCarouselIndex(prev => ({ ...prev, [previewLightboxPlatform]: previewLightboxIndex - 1 }))}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-slate-700 hover:bg-white transition-colors"
+                  aria-label="Previous preview (lightbox)"
+                >
+                  ‹
+                </button>
+              )}
+              {previewLightboxIndex < previewLightboxCreatives.length - 1 && (
+                <button
+                  onClick={() => setPreviewCarouselIndex(prev => ({ ...prev, [previewLightboxPlatform]: previewLightboxIndex + 1 }))}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-slate-700 hover:bg-white transition-colors"
+                  aria-label="Next preview (lightbox)"
+                >
+                  ›
+                </button>
+              )}
+              <img
+                src={previewLightboxCreative.storage_url}
+                alt="Ad preview"
+                className="block max-w-full max-h-[85vh] w-auto h-auto object-contain rounded-lg"
+              />
+            </div>
+          ) : (
+            <>
+              {previewLightboxIndex > 0 && (
+                <button
+                  onClick={() => setPreviewCarouselIndex(prev => ({ ...prev, [previewLightboxPlatform]: previewLightboxIndex - 1 }))}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-slate-700 hover:bg-white transition-colors"
+                  aria-label="Previous preview (lightbox)"
+                >
+                  ‹
+                </button>
+              )}
+              {previewLightboxIndex < previewLightboxCreatives.length - 1 && (
+                <button
+                  onClick={() => setPreviewCarouselIndex(prev => ({ ...prev, [previewLightboxPlatform]: previewLightboxIndex + 1 }))}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-slate-700 hover:bg-white transition-colors"
+                  aria-label="Next preview (lightbox)"
+                >
+                  ›
+                </button>
+              )}
+              <img
+                src={previewLightboxCreative.storage_url}
+                alt="Ad preview"
+                className="w-full h-full object-contain rounded-lg max-h-[85vh]"
+              />
+            </>
           )}
-          {previewLightboxIndex < previewLightboxCreatives.length - 1 && (
-            <button
-              onClick={() => setPreviewCarouselIndex(prev => ({ ...prev, [previewLightboxPlatform]: previewLightboxIndex + 1 }))}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-slate-700 hover:bg-white transition-colors"
-              aria-label="Next preview (lightbox)"
-            >
-              ›
-            </button>
-          )}
-          <img
-            src={previewLightboxCreative.storage_url}
-            alt="Ad preview"
-            className="w-full h-full object-contain rounded-lg max-h-[85vh]"
-          />
         </Modal>
       )}
     </div>

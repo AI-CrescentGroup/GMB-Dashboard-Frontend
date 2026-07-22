@@ -92,13 +92,56 @@ function formatCurrency(val: number): string {
   return `₹${val.toLocaleString('en-IN')}`
 }
 
-function fmtKpiValue(val: number, kpi: string): string {
-  return kpi === 'spend_inr' ? formatCurrency(val) : formatNumber(val)
+// Reach / Clicks / Impressions only. These run to the billions, so they get a
+// raw integer under 1K, K through the thousands, and "M+" (not "Mn") from a
+// million up — the "+" reads as "at least this much" for a rounded headline
+// figure. The exact count is always one hover away via exactValue() below.
+function formatReachStyle(val: number): string {
+  // Up to 2 decimals, trailing zeros trimmed — "2.07M+" keeps both, but a round
+  // axis tick reads "350M+" rather than "350.00M+".
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2).replace(/\.?0+$/, '')}M+`
+  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}K`
+  return val.toLocaleString('en-IN')
 }
 
-// Admin-only page: Impressions/Clicks use Mn notation, not the Cr/L/K scale above.
-function formatMillions(val: number): string {
-  return `${(val / 1_000_000).toFixed(1)}Mn`
+// Store Visits / Website Visits / Driving Directions — every count-type metric
+// that ISN'T reach/clicks/impressions. Same L/Cr thresholds as formatCurrency
+// above, just without the ₹: these are read by an Indian audience where
+// lakh/crore is the natural scale for this magnitude.
+function formatLakhStyle(val: number): string {
+  if (val >= 10_000_000) return `${(val / 10_000_000).toFixed(2)}Cr`
+  if (val >= 100_000) return `${(val / 100_000).toFixed(2)}L`
+  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}K`
+  return val.toLocaleString('en-IN')
+}
+
+// Hover text for every value rendered through the two formatters above —
+// applied unconditionally, including to values under 1K that are already exact.
+// An abbreviated number should never be the only version a dealer can see.
+function exactValue(val: number): string {
+  return val.toLocaleString('en-IN')
+}
+
+// Metric-type dispatcher for the KPI-selector-driven visuals (Performance Trends
+// pies + state bar chart, Top Performers table). Those render whichever metric
+// the selector is on, so the formatter has to follow the live selection rather
+// than being fixed per-component: spend stays on currency, impressions/clicks
+// read as M+, GMB/GA4 counts as lakh, and calls keep the plain K/L/Cr scale.
+const REACH_STYLE_KPIS = new Set(['impressions', 'link_clicks', 'reach'])
+const LAKH_STYLE_KPIS = new Set(['website_visits', 'driving_directions', 'store_visits'])
+
+function fmtKpiValue(val: number, kpi: string): string {
+  if (kpi === 'spend_inr') return formatCurrency(val)
+  if (REACH_STYLE_KPIS.has(kpi)) return formatReachStyle(val)
+  if (LAKH_STYLE_KPIS.has(kpi)) return formatLakhStyle(val)
+  return formatNumber(val)
+}
+
+// Exact-value hover text, but only for the metrics that actually route through
+// formatReachStyle/formatLakhStyle — calls and spend keep their existing
+// formatting and get no hover, so this returns undefined for them.
+function exactValueIfCounted(val: number, kpi: string): string | undefined {
+  return REACH_STYLE_KPIS.has(kpi) || LAKH_STYLE_KPIS.has(kpi) ? exactValue(val) : undefined
 }
 
 
@@ -138,7 +181,10 @@ function KpiCard({
   )
 }
 
-function CustomTooltip({ active, payload }: any) {
+// `kpi` is threaded in from the caller's selectedKpi so the default branch can
+// format the hovered value on the same scale as the chart it belongs to. The
+// calls and spend branches below are metric-specific already and unaffected.
+function CustomTooltip({ active, payload, kpi }: any) {
   if (!active || !payload?.length) return null
   const entry = payload[0]
   if (!entry) return null
@@ -170,7 +216,13 @@ function CustomTooltip({ active, payload }: any) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-3 text-xs">
       <p className="font-semibold text-slate-800 mb-1">{data?.name ?? entry.name}</p>
-      <p className="text-slate-600">{entry.value ? formatNumber(entry.value) : '—'}</p>
+      <p className="text-slate-600">{entry.value ? fmtKpiValue(entry.value, kpi) : '—'}</p>
+      {/* For the abbreviated count metrics this hover IS the exact-value
+          affordance — a nested `title` would be unreachable inside a tooltip
+          that tracks the cursor, so the exact integer is shown inline. */}
+      {entry.value && exactValueIfCounted(entry.value, kpi) ? (
+        <p className="text-[11px] text-slate-400 mt-0.5">{exactValueIfCounted(entry.value, kpi)}</p>
+      ) : null}
     </div>
   )
 }
@@ -593,12 +645,14 @@ function OverviewMetricsPanel() {
           <KpiCard
             icon={<Eye size={16} className="text-blue-500" />}
             label="Impressions"
-            value={formatMillions(kpi.totalImpressions)}
+            value={formatReachStyle(kpi.totalImpressions)}
+            title={exactValue(kpi.totalImpressions)}
           />
           <KpiCard
             icon={<MousePointerClick size={16} className="text-amber-500" />}
             label="Clicks"
-            value={formatMillions(kpi.totalClicks)}
+            value={formatReachStyle(kpi.totalClicks)}
+            title={exactValue(kpi.totalClicks)}
           />
           <KpiCard
             icon={<Activity size={16} className="text-slate-300" />}
@@ -606,7 +660,7 @@ function OverviewMetricsPanel() {
             value={
               reachLoading ? '…'
               : reachData?.reach == null ? '—'
-              : formatMillions(reachData.reach)
+              : formatReachStyle(reachData.reach)
             }
             note={
               reachLoading ? 'All Meta campaigns'
@@ -615,7 +669,11 @@ function OverviewMetricsPanel() {
                 ? `All Meta campaigns · ${reachData.dealers_covered}/${reachData.dealers_requested} dealers`
                 : 'All Meta campaigns'
             }
-            title={!reachLoading && reachData?.reach == null ? 'Reach unavailable — check connection' : undefined}
+            title={
+              reachLoading ? undefined
+              : reachData?.reach == null ? 'Reach unavailable — check connection'
+              : exactValue(reachData.reach)
+            }
           />
           <KpiCard
             icon={<TrendingUp size={16} className="text-indigo-500" />}
@@ -665,19 +723,22 @@ function OverviewMetricsPanel() {
           <KpiCard
             icon={<MapPin size={16} className="text-emerald-500" />}
             label="Store Visits"
-            value={formatNumber(kpi.storeVisits)}
+            value={formatLakhStyle(kpi.storeVisits)}
             subtitle="From Google Ads"
+            title={exactValue(kpi.storeVisits)}
           />
           <KpiCard
             icon={<Navigation size={16} className="text-emerald-500" />}
             label="Driving Directions"
-            value={formatNumber(kpi.directions)}
+            value={formatLakhStyle(kpi.directions)}
             subtitle="From Google Ads"
+            title={exactValue(kpi.directions)}
           />
           <KpiCard
             icon={<Activity size={16} className="text-blue-500" />}
             label="Website Visits"
-            value={formatNumber(kpi.websiteVisits)}
+            value={formatLakhStyle(kpi.websiteVisits)}
+            title={exactValue(kpi.websiteVisits)}
           />
         </div>
       )}
@@ -724,7 +785,7 @@ function OverviewMetricsPanel() {
               ) : (
                 <div className="flex items-center gap-4">
                   <div className="flex flex-col justify-center min-w-[90px]">
-                    <div className="text-xl font-bold text-slate-900">
+                    <div className="text-xl font-bold text-slate-900" title={exactValueIfCounted(totalZone, selectedKpi)}>
                       {fmtKpiValue(totalZone, selectedKpi)}
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5">{kpiLabel}</div>
@@ -745,7 +806,7 @@ function OverviewMetricsPanel() {
                             <Cell key={entry.name} fill={ZONE_COLORS[entry.name] ?? '#cbd5e1'} />
                           ))}
                         </Pie>
-                        <Tooltip content={<CustomTooltip />} />
+                        <Tooltip content={<CustomTooltip kpi={selectedKpi} />} />
                         <Legend
                           iconType="circle"
                           iconSize={8}
@@ -768,7 +829,7 @@ function OverviewMetricsPanel() {
               ) : (
                 <div className="flex items-center gap-4">
                   <div className="flex flex-col justify-center min-w-[90px]">
-                    <div className="text-xl font-bold text-slate-900">
+                    <div className="text-xl font-bold text-slate-900" title={exactValueIfCounted(totalTier, selectedKpi)}>
                       {fmtKpiValue(totalTier, selectedKpi)}
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5">{kpiLabel}</div>
@@ -789,7 +850,7 @@ function OverviewMetricsPanel() {
                             <Cell key={entry.name} fill={TIER_COLORS[entry.name] ?? '#cbd5e1'} />
                           ))}
                         </Pie>
-                        <Tooltip content={<CustomTooltip />} />
+                        <Tooltip content={<CustomTooltip kpi={selectedKpi} />} />
                         <Legend
                           iconType="circle"
                           iconSize={8}
@@ -841,11 +902,11 @@ function OverviewMetricsPanel() {
                   tick={{ fontSize: 11, fill: '#94a3b8' }}
                 />
                 <YAxis
-                  tickFormatter={(v: number) => formatNumber(v)}
+                  tickFormatter={(v: number) => fmtKpiValue(v, selectedKpi)}
                   tick={{ fontSize: 11, fill: '#94a3b8' }}
                   width={60}
                 />
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip content={<CustomTooltip kpi={selectedKpi} />} />
                 <Bar
                   dataKey="value"
                   fill="#6366f1"
@@ -991,7 +1052,12 @@ function OverviewMetricsPanel() {
                         <td className="px-4 py-3 font-medium text-slate-900 text-sm border-b border-slate-50 truncate text-center">{d.dealer_name}</td>
                         <td className="px-4 py-3 text-slate-500 text-sm border-b border-slate-50 text-center">{d.zone}</td>
                         <td className="px-4 py-3 text-slate-500 text-sm border-b border-slate-50 text-center">{d.tier}</td>
-                        <td className="px-4 py-3 text-slate-700 text-sm border-b border-slate-50 text-center">{formatNumber(d.value)}</td>
+                        <td
+                          className="px-4 py-3 text-slate-700 text-sm border-b border-slate-50 text-center"
+                          title={exactValueIfCounted(d.value, topPerformersKpi)}
+                        >
+                          {fmtKpiValue(d.value, topPerformersKpi)}
+                        </td>
                       </tr>
                     ))
                   )}
