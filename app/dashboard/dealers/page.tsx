@@ -6,7 +6,7 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
-import { getDealers, getMetrics, getMetricsSummary, getCampaignSummary, getMetricsByDealerMonth, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives, getAdPreviews, getReach } from '@/lib/queries'
+import { getDealers, getMetrics, getMetricsSummary, getCampaignSummary, getMetricsByDealerMonth, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives, getAdPreviews, getGoogleAdPreviews, getReach } from '@/lib/queries'
 import { exportDealerPPT } from '@/lib/exportPPT'
 import { Select } from '@/components/ui/select'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
@@ -631,6 +631,14 @@ function CreativeCarousel({
   const current = creatives[index]
   const canPrev = index > 0
   const canNext = index < creatives.length - 1
+  // Google preview rows (google_ad_previews_current) carry no headline/ad_name/
+  // campaign_name. source_deck is deliberately NOT used as a fallback here: it's
+  // a category-level attribute (which dealer's deck was used as the template
+  // when that brand_category's slides were rendered), identical across every
+  // dealer sharing the category — showing it under a different dealer's preview
+  // reads as if that dealer's name is being shown, which is misleading. Omit the
+  // title line entirely for Google, same as Facebook/Instagram previews.
+  const title = current.headline || current.ad_name || current.campaign_name
 
   return (
     <div className="flex-1 min-w-0">
@@ -667,9 +675,11 @@ function CreativeCarousel({
           )}
         </div>
         <div className="p-3">
-          <p className="text-xs text-slate-600 font-medium leading-tight line-clamp-2">
-            {current.headline || current.ad_name || current.campaign_name}
-          </p>
+          {title && (
+            <p className="text-xs text-slate-600 font-medium leading-tight line-clamp-2">
+              {title}
+            </p>
+          )}
           {current.description && (
             <p className="text-xs text-slate-400 mt-1 line-clamp-1">{current.description}</p>
           )}
@@ -819,9 +829,15 @@ export default function DealersPage() {
       return
     }
     setPreviewsLoading(true)
-    getAdPreviews(selectedDealerId)
-      .then(data => {
-        setPreviewsData(data)
+    // Meta previews (dealer_id-keyed) and Google previews (brand_category-keyed,
+    // resolved inside getGoogleAdPreviews) are independent fetches — run in
+    // parallel and merge, same as the summary/campaigns/monthly Promise.all above.
+    Promise.all([
+      getAdPreviews(selectedDealerId),
+      getGoogleAdPreviews(selectedDealerId),
+    ])
+      .then(([data, googlePreviews]) => {
+        setPreviewsData({ ...data, google: googlePreviews })
         setPreviewCarouselIndex({ google: 0, facebook: 0, instagram: 0 })
       })
       .catch(err => console.error('previews fetch error:', err))
@@ -849,15 +865,17 @@ export default function DealersPage() {
 
   // Ad Creatives / Ad Previews gate on the SAME booleans, intersected with
   // "actually has an asset to show" — so a stale creative for a platform the
-  // dealer no longer runs doesn't resurrect a block. Previews are Meta-only:
-  // Google ad previews are deliberately not wired here.
+  // dealer no longer runs doesn't resurrect a block. Google previews additionally
+  // require a resolved brand_category with rows in google_ad_previews_current
+  // (see getGoogleAdPreviews) — a dealer with an active Google campaign but no
+  // brand_category match still yields previewsData.google = [] and drops out here.
   const creativePlatforms = useMemo(
     () => activePlatforms.filter((p) => creativesData[p].length > 0),
     [activePlatforms, creativesData]
   )
   const previewPlatforms = useMemo(
     () => activePlatforms.filter(
-      (p): p is 'facebook' | 'instagram' => p !== 'google' && previewsData[p].length > 0
+      (p): p is 'facebook' | 'instagram' | 'google' => previewsData[p].length > 0
     ),
     [activePlatforms, previewsData]
   )
@@ -1604,9 +1622,12 @@ export default function DealersPage() {
   </div>
 )}
 
-          {/* ── Ad Previews (dealer selected + has preview data for Meta platforms) ──
-              Previews are Meta-only, so a Google-only dealer can never have one:
-              the section drops entirely rather than showing an empty shell. ── */}
+          {/* ── Ad Previews (dealer selected + has preview data for at least one platform) ──
+              Google previews need BOTH an active Google campaign (already required via
+              activePlatforms) AND a resolved brand_category with rows in
+              google_ad_previews_current (see getGoogleAdPreviews) — neither alone is
+              enough, so a Google-only-by-campaign dealer with no matching brand_category
+              still drops the tile, same as any other empty-data platform. ── */}
 {selectedDealerId && previewPlatforms.length > 0 && (
   <div>
     <div className="flex items-center justify-between border-l-4 border-purple-500 pl-3 mb-4">
@@ -1619,11 +1640,11 @@ export default function DealersPage() {
     ) : previewPlatforms.length === 0 ? (
       <div className="text-center py-12 text-slate-400 text-sm">No ad previews found for this dealer</div>
     ) : (
-      // Meta-only by design — Google ad previews are out of scope and are not
-      // wired here. Same flex-1 re-split as Ad Creatives above.
+      // Same flex-1 re-split as Ad Creatives above.
       <div className="flex flex-col md:flex-row gap-6">
         {previewPlatforms.map((p) => {
           const cfg = {
+            google: { label: 'Google', badgeClass: 'text-blue-700 bg-blue-50 border border-blue-100' },
             facebook: { label: 'Facebook', badgeClass: 'text-indigo-700 bg-indigo-50 border border-indigo-100' },
             instagram: { label: 'Instagram', badgeClass: 'text-pink-700 bg-pink-50 border border-pink-100' },
           }[p]

@@ -463,7 +463,9 @@ export async function getAdCreatives(dealerId: string): Promise<{
 }
 
 // Get ad previews for a specific dealer, grouped by platform. Google is
-// always empty for now — no Google preview pipeline exists yet.
+// always empty here — Google previews are fetched separately via
+// getGoogleAdPreviews (brand_category-keyed, not dealer_id-keyed at the
+// source table) and merged in by the caller.
 export async function getAdPreviews(dealerId: string): Promise<{
   google: any[];
   facebook: any[];
@@ -482,6 +484,37 @@ export async function getAdPreviews(dealerId: string): Promise<{
     facebook:  rows.filter(r => r.platform === 'facebook'),
     instagram: rows.filter(r => r.platform === 'instagram'),
   }
+}
+
+// Get Google ad previews for a specific dealer. Unlike ad_previews (which is
+// keyed directly by dealer_id), google_ad_previews is keyed by brand_category —
+// so this resolves dealer -> brand_category first, then looks up the slides for
+// that category. Dealers with no brand_category (currently SIDDHI TILES, Luxmi
+// Tiles, DEEP SANITARY, DAGA MARKETING) fall through to an empty array with no
+// special-casing needed.
+export async function getGoogleAdPreviews(dealerId: string): Promise<{
+  id: string;
+  slide_index: number;
+  storage_url: string;
+  source_deck: string | null;
+}[]> {
+  const { data: dealer, error: dealerError } = await supabase
+    .from('dealers')
+    .select('brand_category')
+    .eq('id', dealerId)
+    .single()
+  if (dealerError) { console.error('getGoogleAdPreviews dealer lookup error:', dealerError); return [] }
+
+  const brandCategory = dealer?.brand_category
+  if (!brandCategory) return []
+
+  const { data, error } = await supabase
+    .from('google_ad_previews_current')
+    .select('id, slide_index, storage_url, source_deck')
+    .eq('brand_category', brandCategory)
+    .order('slide_index', { ascending: true })
+  if (error) { console.error('getGoogleAdPreviews error:', error); return [] }
+  return data ?? []
 }
 
 const AUDIENCE_AGE_ORDER = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+']
