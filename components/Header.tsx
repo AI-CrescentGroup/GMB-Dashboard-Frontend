@@ -1,23 +1,18 @@
 'use client'
 
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { logoutUser, getCurrentUser } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { LogOut, BarChart3, Users } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 
-const allNavItems = [
-  { href: '/dashboard', label: 'Overview', icon: BarChart3 },
-  { href: '/dashboard/dealers', label: 'Dealers', icon: Users },
-]
-
-export default function Header({ role }: { role?: string }) {
+// `role` is retained for callers that still pass it, but the top-level
+// Overview/Dealers pill nav that used to live here has moved into the unified
+// collapsible Sidebar (admin-only). Header now renders just the brand, the
+// user chip and logout. `onToggleSidebar` (passed only for admins) turns the
+// logo square into the sidebar pin toggle.
+export default function Header({ role, onToggleSidebar }: { role?: string; onToggleSidebar?: () => void }) {
   const [user, setUser] = useState<any>(null)
-  const [dealerStoreName, setDealerStoreName] = useState<string | null>(null)
   const router = useRouter()
-  const pathname = usePathname()
-  const navItems = (role === 'branch_head' || role === 'dealer') ? allNavItems.filter(item => item.href !== '/dashboard') : allNavItems
 
   useEffect(() => {
     async function loadUser() {
@@ -26,21 +21,6 @@ export default function Header({ role }: { role?: string }) {
     }
     loadUser()
   }, [])
-
-  // Dealer role: show the store name instead of "Dealers" in the pill nav
-  useEffect(() => {
-    if (role !== 'dealer') return
-    const stored = JSON.parse(localStorage.getItem('user') || '{}')
-    if (!stored?.dealer_id) return
-    supabase
-      .from('dealers')
-      .select('dealer_name')
-      .eq('id', stored.dealer_id)
-      .single()
-      .then(({ data }) => {
-        if (data?.dealer_name) setDealerStoreName(data.dealer_name)
-      })
-  }, [role])
 
   async function handleLogout() {
     await logoutUser()
@@ -58,42 +38,27 @@ export default function Header({ role }: { role?: string }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
-      <div
-        className="w-full px-4 sm:px-8 h-16"
-        style={{ display: 'grid', gridTemplateColumns: 'minmax(44px, 1fr) minmax(0, auto) minmax(96px, 1fr)', alignItems: 'center' }}
-      >
-        {/* Left: Brand */}
-        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0" style={{ justifySelf: 'start' }}>
-          <div className="h-7 w-7 rounded-md bg-indigo-600 flex items-center justify-center flex-shrink-0" />
+      <div className="w-full px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
+        {/* Left: Brand (logo square doubles as the sidebar pin toggle for admins) */}
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          {onToggleSidebar ? (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              title="Toggle sidebar"
+              aria-label="Toggle sidebar"
+              className="h-7 w-7 rounded-md bg-indigo-600 flex items-center justify-center flex-shrink-0 transition hover:bg-indigo-700"
+            />
+          ) : (
+            <div className="h-7 w-7 rounded-md bg-indigo-600 flex items-center justify-center flex-shrink-0" />
+          )}
           <span className="text-[15px] font-semibold tracking-tight text-slate-900 truncate">
             Jaquar <span className="hidden sm:inline text-slate-400 font-normal">GMB</span>
           </span>
         </div>
 
-        {/* Center: Pill Nav */}
-        <nav className="flex items-center gap-1 bg-slate-100 rounded-full p-1 max-w-full overflow-x-auto">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`px-3 sm:px-6 py-1.5 rounded-full text-[12px] sm:text-[13px] font-medium transition whitespace-nowrap ${
-                  isActive
-                    ? 'bg-indigo-600 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08)]'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {item.href === '/dashboard/dealers' && role === 'dealer' && dealerStoreName
-                  ? dealerStoreName
-                  : item.label}
-              </Link>
-            )
-          })}
-        </nav>
-
         {/* Right: User + Logout */}
-        <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0" style={{ justifySelf: 'end' }}>
+        <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0">
           {user && (
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="hidden sm:block text-right">

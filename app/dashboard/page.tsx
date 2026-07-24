@@ -9,8 +9,6 @@ import { getDealers, getMetrics, getMetricsSummary, getMetricsByDealerMonth, get
 import { TrendingUp, MapPin, Activity, Phone, Navigation, Eye, Zap, MousePointerClick } from 'lucide-react'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
 import { DateRangeFilter, isRangeMonthAligned, type DateRange } from '@/components/DateRangeFilter'
-import DashboardSidebar, { type OverviewSidebarView } from '@/components/DashboardSidebar'
-import PlacementAnalysisPanel from '@/components/placement/PlacementAnalysisPanel'
 
 // Full data range — used to preload the month-grain RPC + calls once on mount.
 const DATE_FROM = ALL_TIME_DATE_FROM
@@ -1071,28 +1069,12 @@ function OverviewMetricsPanel() {
   )
 }
 
-// ─── Top-level route component — adds the left sidebar, switches between
-//     "Overview metrics" (verbatim relocation above) and the new
-//     "Placement, audience & creative analysis" panel. Header.tsx's top nav
-//     (Overview | Dealers pills) is untouched — this sidebar lives inside the
-//     existing /dashboard route, one level below it. ─────────────────────────
+// ─── /dashboard route — now renders only the "Overview metrics" panel. The
+//     nav (Overview metrics · Placement & Creative · Dealers) moved to the
+//     shared collapsible Sidebar in app/dashboard/layout.tsx, and the former
+//     "Placement & Creative" view is now its own route at
+//     /dashboard/placement-creative. ────────────────────────────────────────
 
 export default function OverviewPage() {
-  const [activeView, setActiveView] = useState<OverviewSidebarView>('overview')
-  const [role, setRole] = useState('')
-
-  useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
-    setRole(user?.role || '')
-  }, [])
-
-  return (
-    <div className="flex items-start">
-      <DashboardSidebar activeView={activeView} onSelect={setActiveView} />
-      <div className="flex-1 min-w-0">
-        {activeView === 'overview' && <OverviewMetricsPanel />}
-        {activeView === 'placement' && <PlacementAnalysisPanel role={role} />}
-      </div>
-    </div>
-  )
+  return <OverviewMetricsPanel />
 }

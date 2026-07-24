@@ -5,6 +5,7 @@ import { getDealers, getPlacementBreakdown } from '@/lib/queries'
 import { Select } from '@/components/ui/select'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter'
+import { getStoredUser } from '@/lib/auth'
 
 type Row = { breakdown_value: string; link_clicks: number }
 type DisplayRow = { label: string; link_clicks: number }
@@ -158,7 +159,7 @@ export default function PlacementTab({ role }: { role: string }) {
   // Same pattern as dealers/page.tsx: dealer role never sees the selector,
   // their own dealer_id is force-selected from localStorage.
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const user = getStoredUser()
     if (user?.role === 'dealer' && user?.dealer_id) {
       setSelectedDealerId(user.dealer_id)
     }

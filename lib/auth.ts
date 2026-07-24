@@ -1,5 +1,23 @@
 import { supabase } from './supabase'
 
+// Single source of truth for the localStorage-cached user blob. Every client
+// component that needs role/dealer_id/email now reads through these two helpers
+// instead of hand-rolling `JSON.parse(localStorage.getItem('user') || '{}')`.
+// Same trust level as before — this is a UI-convenience cache, NOT a security
+// boundary; RLS remains the real enforcement.
+export function getStoredUser(): { email?: string; username?: string; role?: string; client_id?: string; dealer_id?: string } {
+  if (typeof window === 'undefined') return {}
+  try {
+    return JSON.parse(localStorage.getItem('user') || '{}')
+  } catch {
+    return {}
+  }
+}
+
+export function getUserRole(): string {
+  return getStoredUser()?.role || ''
+}
+
 export async function loginUser(username: string, password: string) {
   // Step 1: Lookup user by username to get email
   const { data: userData, error: userError } = await supabase

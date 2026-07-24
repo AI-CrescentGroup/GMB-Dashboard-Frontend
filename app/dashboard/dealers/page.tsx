@@ -8,12 +8,13 @@ import {
 } from 'recharts'
 import { getDealers, getMetrics, getMetricsSummary, getCampaignSummary, getMetricsByDealerMonth, getLatestMetricDate, getCallMetrics, getBudgets, getAdCreatives, getAdPreviews, getGoogleAdPreviews, getReach } from '@/lib/queries'
 import { exportDealerPPT } from '@/lib/exportPPT'
+import { getStoredUser } from '@/lib/auth'
 import { Select } from '@/components/ui/select'
 import { ALL_TIME_DATE_FROM, ALL_TIME_DATE_TO } from '@/lib/constants'
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter'
 import {
-  Download, Navigation, MapPin, TrendingUp, Activity, Camera, HelpCircle, X,
-  Eye, MousePointerClick, Percent, IndianRupee, Gauge,
+  Download, Navigation, TrendingUp, Activity, Camera, HelpCircle, X,
+  Eye, MousePointerClick, IndianRupee, Gauge, Globe,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -301,30 +302,37 @@ const LINE_METRIC_OPTIONS = [
 ] as const
 
 // Single-series monthly trend. y-axis compact; tooltip shows exact absolute value.
+// showToggle=false renders a metric-locked instance (no pill buttons) — used for
+// the dedicated Website Visits chart, which must never be flipped to another metric.
 function MetricLineChart({
-  series, metric, onMetric, rangeLabel,
+  series, metric, onMetric, rangeLabel, showToggle = true,
 }: {
   series: { month: string; value: number }[]
   metric: string
   onMetric: (m: string) => void
   rangeLabel: string
+  showToggle?: boolean
 }) {
   const metricLabel = LINE_METRIC_OPTIONS.find((o) => o.value === metric)?.label ?? metric
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow p-5 h-full">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {LINE_METRIC_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => onMetric(o.value)}
-              className={toggleButtonClass(metric === o.value)}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
+        {showToggle ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {LINE_METRIC_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => onMetric(o.value)}
+                className={toggleButtonClass(metric === o.value)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span className="text-sm font-semibold text-slate-800">{metricLabel}</span>
+        )}
         <RangeChip label={rangeLabel} />
       </div>
       {series.length === 0 ? (
@@ -707,7 +715,6 @@ export default function DealersPage() {
   const [campaignRows, setCampaignRows] = useState<any[]>([])
   // (dealer_id, month, platform) grain from the fast month-grain RPC — powers the trend line chart.
   const [monthlyRows, setMonthlyRows] = useState<any[]>([])
-  const [lineMetric, setLineMetric] = useState('driving_directions')
   const [pptLoading, setPptLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   // Single date filter driving the whole page — presets + calendar. Default = All time.
@@ -744,7 +751,7 @@ export default function DealersPage() {
 
   // Read role + auto-select dealer from localStorage
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const user = getStoredUser()
     const userRole = user?.role || ''
     setRole(userRole)
     if (userRole === 'dealer' && user?.dealer_id) {
@@ -1025,25 +1032,32 @@ export default function DealersPage() {
 
   // Monthly trend series for the line chart — summed across dealers per month. The
   // per-platform metric selection mirrors the KPI totals (kpiFromSummary/conversions)
-  // exactly, so the chart reconciles with the stat cards and campaign tables.
-  const lineSeries = useMemo(() => {
+  // exactly, so the chart reconciles with the stat cards and campaign tables. Extracted
+  // to a plain function (not a hook) so both the toggle-driven chart and the
+  // metric-locked Website Visits chart can compute a series from the same logic.
+  const buildLineSeries = (metric: string) => {
     const byMonth: Record<string, number> = {}
     const months = new Set<string>()
     monthlyRows.forEach((r: any) => {
       months.add(r.month)
       let v = 0
-      if (lineMetric === 'driving_directions') {
+      if (metric === 'driving_directions') {
         if (r.platform === 'gmb') v = r.driving_directions || 0
-      } else if (lineMetric === 'website_visits') {
+      } else if (metric === 'website_visits') {
         if (r.platform === 'ga4') v = r.website_visits || 0
       } else if (r.platform === 'google' || r.platform === 'facebook' || r.platform === 'instagram') {
         // link_clicks / impressions → paid platforms only
-        v = (lineMetric === 'link_clicks' ? r.link_clicks : r.impressions) || 0
+        v = (metric === 'link_clicks' ? r.link_clicks : r.impressions) || 0
       }
       byMonth[r.month] = (byMonth[r.month] || 0) + v
     })
     return [...months].sort().map((m) => ({ month: monthShort(m), value: byMonth[m] || 0 }))
-  }, [monthlyRows, lineMetric])
+  }
+
+  // Both trend charts are metric-locked (no toggle) — fixed series computed
+  // straight from monthlyRows, no selectable-metric state involved.
+  const drivingDirectionsSeries = useMemo(() => buildLineSeries('driving_directions'), [monthlyRows])
+  const websiteVisitsSeries = useMemo(() => buildLineSeries('website_visits'), [monthlyRows])
 
   const rangeChip = `${chipDate(range.from)} – ${chipDate(range.to)}`
 
@@ -1246,7 +1260,7 @@ export default function DealersPage() {
       {/* ── Top row: 3 stat cards (left) + control stack (right) ── */}
       <div className="flex flex-col lg:flex-row gap-4 mb-4">
         {/* Stat cards — Row 1: Total Spend · Reach · Impressions · Clicks;
-            Row 2: CTR % · CPC ₹ · CPM ₹ · Store Visits */}
+            Row 2: Driving Directions · Website Visits · CPC ₹ · CPM ₹ */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-1 content-start">
           {loading ? (
             Array.from({ length: 8 }).map((_, i) => (
@@ -1297,9 +1311,16 @@ export default function DealersPage() {
                 title={exactValue(kpi.totalClicks)}
               />
               <KpiCard
-                icon={<Percent size={16} className="text-amber-500" />}
-                label="CTR %"
-                value={`${kpiRates.ctr.toFixed(2)}%`}
+                icon={<Navigation size={16} className="text-emerald-500" />}
+                label="Driving Directions"
+                value={formatLakhStyle(conversions.directions)}
+                title={exactValue(conversions.directions)}
+              />
+              <KpiCard
+                icon={<Globe size={16} className="text-blue-500" />}
+                label="Website Visits"
+                value={formatLakhStyle(conversions.websiteVisits)}
+                title={exactValue(conversions.websiteVisits)}
               />
               <KpiCard
                 icon={<IndianRupee size={16} className="text-rose-500" />}
@@ -1310,12 +1331,6 @@ export default function DealersPage() {
                 icon={<Gauge size={16} className="text-teal-500" />}
                 label="CPM ₹"
                 value={`₹${kpiRates.cpm.toFixed(2)}`}
-              />
-              <KpiCard
-                icon={<MapPin size={16} className="text-emerald-500" />}
-                label="Store Visits"
-                value={formatLakhStyle(conversions.storeVisits)}
-                title={exactValue(conversions.storeVisits)}
               />
             </>
           )}
@@ -1359,7 +1374,8 @@ export default function DealersPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          {/* ── Charts row: Calls doughnut (narrow) + metric trend (wide, 1:2) ── */}
+          {/* ── Charts row: Calls doughnut (narrow) + Driving Directions trend (wide, 1:2) ──
+              Metric-locked (no toggle) — same pattern as the Website Visits chart below. ── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-1">
               <CallsDoughnut
@@ -1371,11 +1387,136 @@ export default function DealersPage() {
             </div>
             <div className="lg:col-span-2">
               <MetricLineChart
-                series={lineSeries}
-                metric={lineMetric}
-                onMetric={setLineMetric}
+                series={drivingDirectionsSeries}
+                metric="driving_directions"
+                onMetric={() => {}}
                 rangeLabel={rangeChip}
+                showToggle={false}
               />
+            </div>
+          </div>
+
+          {/* ── Charts row B: Website Visits & User Journey table (narrow) + metric-locked
+              Website Visits trend (wide, 1:2) — relocated from the former Conversions
+              section; same grid pattern as Charts row A above. ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-1 bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4 h-full">
+              <h3 className="text-sm font-semibold text-slate-800 mb-3">Website - Visits and User Journey</h3>
+              <table className="w-full">
+                <tbody>
+                  <tr>
+                    <td className="py-2 text-sm text-slate-700 font-medium">Website Visits</td>
+                    <td
+                      className="py-2 text-right text-xl font-bold text-slate-900 font-mono"
+                      title={exactValue(conversions.websiteVisits)}
+                    >
+                      {formatLakhStyle(conversions.websiteVisits)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={2} className="py-0">
+                      <div className="border-t border-slate-200 my-1" />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={2} className="py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      User Journey
+                    </td>
+                  </tr>
+                  {[
+                    { label: 'Call Clicks', value: conversions.callNumberTrack + conversions.callTrack },
+                    { label: 'Download Catalogue', value: conversions.downloadCatalogue },
+                    { label: 'Drive Direction', value: conversions.driveDirection },
+                    { label: 'Enquiry Track', value: conversions.enquiryTrack },
+                    { label: 'Form Submit', value: conversions.formSubmit },
+                  ].map(({ label, value }) => (
+                    <tr key={label}>
+                      <td className="py-1.5 pl-4 text-sm text-slate-600">{label}</td>
+                      <td
+                        className="py-1.5 text-right text-sm font-mono text-slate-700"
+                        title={exactValue(value)}
+                      >
+                        {formatLakhStyle(value)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="lg:col-span-2">
+              <MetricLineChart
+                series={websiteVisitsSeries}
+                metric="website_visits"
+                onMetric={() => {}}
+                rangeLabel={rangeChip}
+                showToggle={false}
+              />
+            </div>
+          </div>
+
+          {/* ── Call Summary — relocated from the former Conversions section,
+              now full-width instead of half-width. ── */}
+          <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4">
+            <h3 className="text-sm font-semibold text-slate-800">Call Summary</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" style={{ tableLayout: 'fixed', minWidth: '700px' }}>
+                <colgroup>
+                  <col style={{ width: '90px' }} />
+                  <col style={{ width: '130px' }} />
+                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '100px' }} />
+                  <col style={{ width: '100px' }} />
+                  <col style={{ width: '160px' }} />
+                </colgroup>
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Month</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Calls Received</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Answered</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Missed</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Dialled</th>
+                    <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Answered %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {callSummaryMonths.map((m) => {
+                    const row = callSummaryByMonth[m.value]
+                    const pct = row && row.received > 0
+                      ? Math.round((row.answered / row.received) * 100)
+                      : 0
+                    return (
+                      <tr key={m.value} className="border-b border-slate-50">
+                        <td className="px-3 py-2 text-center text-slate-700">{m.label}</td>
+                        <td className="px-3 py-2 text-center text-slate-700">
+                          {row ? formatNumber(row.received) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-center text-slate-700">
+                          {row ? formatNumber(row.answered) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-center text-slate-700">
+                          {row ? formatNumber(row.missed) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-center text-slate-700">
+                          {row ? formatNumber(row.dialled) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <div className="flex items-center justify-center gap-2 min-w-[100px]">
+                            <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-indigo-500 rounded-full transition-all"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-slate-500 w-8">
+                              {row && row.received > 0 ? `${pct}%` : '—'}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -1433,150 +1574,6 @@ export default function DealersPage() {
             instagram={instagramTotals}
             platforms={activePlatforms}
           />
-
-          {/* ── Conversions Section ── */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow p-6">
-            <div className="flex items-center justify-between border-l-4 border-emerald-500 pl-3 mb-6">
-              <span className="text-sm font-semibold text-slate-800">Conversions &amp; Website Activity</span>
-              <span className="text-xs text-slate-400">Real-time conversion tracking</span>
-            </div>
-
-            {/* Two columns: left = 3 stacked cards (Driving Directions, Store Visits,
-                Website Visits & User Journey); right = Call Summary, stretched via
-                flexbox default align-items to match the left column's total height. */}
-            <div className="flex flex-col lg:flex-row gap-4">
-
-              {/* LEFT COLUMN — narrower, ~1 part of a 1:1.6 ratio */}
-              <div className="flex flex-col gap-3 lg:w-[38%] lg:flex-shrink-0">
-                <KpiCard
-                  icon={<Navigation size={16} className="text-emerald-500" />}
-                  label="Driving Directions"
-                  value={formatLakhStyle(conversions.directions)}
-                  subtitle="From Google Ads"
-                  bgClass="bg-slate-50"
-                  title={exactValue(conversions.directions)}
-                />
-                <KpiCard
-                  icon={<MapPin size={16} className="text-emerald-500" />}
-                  label="Store Visits"
-                  value={formatLakhStyle(conversions.storeVisits)}
-                  subtitle="From Google Ads"
-                  bgClass="bg-slate-50"
-                  title={exactValue(conversions.storeVisits)}
-                />
-
-                {/* Website Visits & User Journey — content/styling unchanged, just narrower now */}
-                <div className="bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4">
-                  <h3 className="text-sm font-semibold text-slate-800 mb-3">Website - Visits and User Journey</h3>
-                  <table className="w-full">
-                    <tbody>
-                      <tr>
-                        <td className="py-2 text-sm text-slate-700 font-medium">Website Visits</td>
-                        <td
-                          className="py-2 text-right text-xl font-bold text-slate-900 font-mono"
-                          title={exactValue(conversions.websiteVisits)}
-                        >
-                          {formatLakhStyle(conversions.websiteVisits)}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td colSpan={2} className="py-0">
-                          <div className="border-t border-slate-200 my-1" />
-                        </td>
-                      </tr>
-                      <tr>
-                        <td colSpan={2} className="py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                          User Journey
-                        </td>
-                      </tr>
-                      {[
-                        { label: 'Call Clicks', value: conversions.callNumberTrack + conversions.callTrack },
-                        { label: 'Download Catalogue', value: conversions.downloadCatalogue },
-                        { label: 'Drive Direction', value: conversions.driveDirection },
-                        { label: 'Enquiry Track', value: conversions.enquiryTrack },
-                        { label: 'Form Submit', value: conversions.formSubmit },
-                      ].map(({ label, value }) => (
-                        <tr key={label}>
-                          <td className="py-1.5 pl-4 text-sm text-slate-600">{label}</td>
-                          <td
-                            className="py-1.5 text-right text-sm font-mono text-slate-700"
-                            title={exactValue(value)}
-                          >
-                            {formatLakhStyle(value)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* RIGHT COLUMN — Call Summary, stretched to the left column's full height */}
-              <div className="flex-1 bg-slate-50 rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col min-h-0">
-                <h3 className="text-sm font-semibold text-slate-800 flex-shrink-0">Call Summary</h3>
-                <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0" style={{ maxHeight: '100%' }}>
-                  <table className="w-full text-sm" style={{ tableLayout: 'fixed', minWidth: '700px' }}>
-                    <colgroup>
-                      <col style={{ width: '90px' }} />
-                      <col style={{ width: '130px' }} />
-                      <col style={{ width: '120px' }} />
-                      <col style={{ width: '100px' }} />
-                      <col style={{ width: '100px' }} />
-                      <col style={{ width: '160px' }} />
-                    </colgroup>
-                    <thead>
-                      <tr className="bg-slate-50">
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Month</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Calls Received</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Answered</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Missed</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Dialled</th>
-                        <th className="text-xs uppercase text-slate-400 font-medium px-3 py-2 text-center whitespace-nowrap">Answered %</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {callSummaryMonths.map((m) => {
-                        const row = callSummaryByMonth[m.value]
-                        const pct = row && row.received > 0
-                          ? Math.round((row.answered / row.received) * 100)
-                          : 0
-                        return (
-                          <tr key={m.value} className="border-b border-slate-50">
-                            <td className="px-3 py-2 text-center text-slate-700">{m.label}</td>
-                            <td className="px-3 py-2 text-center text-slate-700">
-                              {row ? formatNumber(row.received) : '—'}
-                            </td>
-                            <td className="px-3 py-2 text-center text-slate-700">
-                              {row ? formatNumber(row.answered) : '—'}
-                            </td>
-                            <td className="px-3 py-2 text-center text-slate-700">
-                              {row ? formatNumber(row.missed) : '—'}
-                            </td>
-                            <td className="px-3 py-2 text-center text-slate-700">
-                              {row ? formatNumber(row.dialled) : '—'}
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <div className="flex items-center justify-center gap-2 min-w-[100px]">
-                                <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-indigo-500 rounded-full transition-all"
-                                    style={{ width: `${pct}%` }}
-                                  />
-                                </div>
-                                <span className="text-xs text-slate-500 w-8">
-                                  {row && row.received > 0 ? `${pct}%` : '—'}
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
 
           {/* ── Ad Creatives (dealer selected + runs at least one platform) ──
               Same gate as everything else: a dealer with no paid platforms has no
